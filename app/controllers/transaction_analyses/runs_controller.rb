@@ -15,19 +15,30 @@ class TransactionAnalyses::RunsController < ApplicationController
       account_ids: run_params[:account_ids],
       start_date: run_params[:start_date],
       end_date: run_params[:end_date],
-      all_history: run_params[:all_history]
+      all_history: ActiveModel::Type::Boolean.new.cast(run_params[:all_history])
     )
 
-    render json: @run, status: :created
+    respond_to do |format|
+      format.html { redirect_to transaction_analysis_path(@transaction_analysis, anchor: "run_#{@run.to_param}"), status: :see_other }
+      format.json { render json: @run, status: :created }
+    end
   end
 
   def clarify
     @run.clarify!(clarify_params[:response])
-    render json: @run
+    respond_to do |format|
+      format.html { redirect_to transaction_analysis_path(@transaction_analysis, anchor: "run_#{@run.to_param}"), status: :see_other }
+      format.json { render json: @run }
+    end
   end
 
   def rerun
-    render json: @run.create_rerun!, status: :created
+    rerun = @run.create_rerun!
+
+    respond_to do |format|
+      format.html { redirect_to transaction_analysis_path(@transaction_analysis, anchor: "run_#{rerun.to_param}"), status: :see_other }
+      format.json { render json: rerun, status: :created }
+    end
   end
 
   private

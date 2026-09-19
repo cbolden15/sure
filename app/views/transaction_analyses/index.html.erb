@@ -1,0 +1,6 @@
+<% title(t(".title")) %>
+<% content_for :breadcrumbs do %>
+  <%= render "layouts/shared/breadcrumbs", breadcrumbs: [[t("breadcrumbs.home"), root_path], [t(".title"), nil]] %>
+<% end %>
+
+<%= render "transaction_analyses/workspace" %>

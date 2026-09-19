@@ -1,0 +1,67 @@
+<article id="<%= dom_id(run) %>" class="scroll-mt-6">
+  <%= render DS::Card.new(class: "gap-5") do %>
+    <header class="space-y-3">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="text-base font-medium text-primary"><%= t(".prompt") %></h2>
+          <p class="mt-1 whitespace-pre-wrap break-words text-sm text-primary"><%= run.prompt %></p>
+        </div>
+        <%= transaction_analysis_status_pill(run) %>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs text-secondary">
+        <%= render DS::Pill.new(label: transaction_analysis_scope_label(run.scope), tone: :neutral, marker: false, icon: "calendar-range") %>
+        <% Array(run.scope["account_labels"]).each do |account_label| %>
+          <%= render DS::Pill.new(label: account_label, tone: :neutral, marker: false, truncate: true) %>
+        <% end %>
+      </div>
+      <p class="text-xs text-subdued"><%= t(".metadata", provider: run.provider_id.presence || t(".not_available"), model: run.model.presence || t(".not_available"), timestamp: l(run.completed_at || run.created_at, format: :short)) %></p>
+    </header>
+
+    <% if run.awaiting_clarification? %>
+      <%= render DS::Alert.new(title: t(".clarification_title"), message: run.clarification_question, variant: :warning, live: :alert) %>
+      <%= form_with url: clarify_transaction_analysis_run_path(analysis, run), scope: :run, class: "space-y-3" do |form| %>
+        <%= form.label :response, t(".clarification_response"), class: "block text-sm font-medium text-primary" %>
+        <%= form.text_area :response, required: true, rows: 3, class: "w-full rounded-lg border border-primary bg-container-inset px-3 py-2 text-sm text-primary focus-ring" %>
+        <%= render DS::Button.new(text: t(".submit_clarification"), type: "submit") %>
+      <% end %>
+    <% elsif run.pending? || run.running? %>
+      <%= render DS::Alert.new(message: t(".pending"), variant: :info, live: :status) %>
+    <% elsif run.failed? %>
+      <%= render DS::Alert.new(title: t(".failed"), message: run.error_message.presence || t(".failed_without_message"), variant: :error, live: :alert) %>
+    <% elsif run.completed? %>
+      <section class="privacy-sensitive" aria-labelledby="<%= dom_id(run, :conclusion) %>">
+        <h3 id="<%= dom_id(run, :conclusion) %>" class="text-sm font-medium text-primary"><%= t(".conclusion") %></h3>
+        <div class="prose prose--ai-chat mt-2 text-sm"><%= transaction_analysis_markdown(run.result_markdown) %></div>
+      </section>
+
+      <section aria-labelledby="<%= dom_id(run, :assumptions) %>">
+        <h3 id="<%= dom_id(run, :assumptions) %>" class="text-sm font-medium text-primary"><%= t(".assumptions") %></h3>
+        <% if run.assumptions.any? %>
+          <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-secondary">
+            <% run.assumptions.each do |assumption| %>
+              <li><%= assumption %></li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="mt-2 text-sm text-secondary"><%= t(".no_assumptions") %></p>
+        <% end %>
+      </section>
+
+      <% if run.deterministic_output.fetch("calculations", []).any? %>
+        <%= render "transaction_analyses/calculations", run: run %>
+      <% end %>
+      <% if transaction_analysis_chart?(run) %>
+        <%= render "transaction_analyses/chart", run: run %>
+      <% end %>
+      <% if run.evidences.any? %>
+        <%= render "transaction_analyses/evidence", run: run %>
+      <% end %>
+
+      <div class="flex flex-wrap gap-2 border-t border-divider pt-4">
+        <%= render DS::Button.new(text: t(".rerun"), href: rerun_transaction_analysis_run_path(analysis, run), variant: "outline", icon: "rotate-cw") %>
+      </div>
+
+      <%= render "transaction_analyses/follow_up_form", analysis: analysis, run: run %>
+    <% end %>
+  <% end %>
+</article>

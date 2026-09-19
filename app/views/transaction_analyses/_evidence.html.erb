@@ -1,0 +1,28 @@
+<section class="privacy-sensitive" aria-labelledby="<%= dom_id(run, :evidence) %>">
+  <h3 id="<%= dom_id(run, :evidence) %>" class="text-sm font-medium text-primary"><%= t(".title") %></h3>
+  <div class="mt-3 grid gap-3 sm:grid-cols-2">
+    <% run.evidences.order(:citation_token).each do |evidence| %>
+      <% snapshot = evidence.snapshot %>
+      <% transaction = accessible_evidence_transaction(evidence) %>
+      <article class="rounded-lg border border-primary bg-container-inset p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="font-mono text-xs text-secondary"><%= evidence.citation_token %></p>
+            <p class="mt-1 truncate text-sm font-medium text-primary"><%= snapshot["merchant"].presence || t(".unknown_merchant") %></p>
+          </div>
+          <% if transaction %>
+            <%= render DS::Link.new(text: t(".view_transaction"), href: transaction_path(transaction.entry), variant: "outline", size: :sm) %>
+          <% else %>
+            <%= render DS::Pill.new(label: t(".unavailable"), tone: :neutral, marker: false, icon: "unlink") %>
+          <% end %>
+        </div>
+        <dl class="mt-3 space-y-1 text-xs">
+          <% if snapshot["date"].present? %><div class="flex justify-between gap-3"><dt class="text-secondary"><%= t(".date") %></dt><dd class="text-primary"><%= snapshot["date"] %></dd></div><% end %>
+          <% if snapshot["category"].present? %><div class="flex justify-between gap-3"><dt class="text-secondary"><%= t(".category") %></dt><dd class="truncate text-primary"><%= snapshot["category"] %></dd></div><% end %>
+          <% if snapshot["account_label"].present? %><div class="flex justify-between gap-3"><dt class="text-secondary"><%= t(".account") %></dt><dd class="truncate text-primary"><%= snapshot["account_label"] %></dd></div><% end %>
+          <% if transaction_analysis_evidence_amount(snapshot).present? %><div class="flex justify-between gap-3"><dt class="text-secondary"><%= t(".amount") %></dt><dd class="text-primary tabular-nums"><%= transaction_analysis_evidence_amount(snapshot) %></dd></div><% end %>
+        </dl>
+      </article>
+    <% end %>
+  </div>
+</section>

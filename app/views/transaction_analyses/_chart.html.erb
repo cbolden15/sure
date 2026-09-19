@@ -1,0 +1,32 @@
+<% chart_data = transaction_analysis_chart_data(run) %>
+<% chart_calculation = run.deterministic_output.fetch("calculations", []).find { |calculation| calculation["token"] == run.chart_spec["calculation_token"] } %>
+<% chart_currency = chart_calculation&.fetch("display_currency", Current.family.currency) || Current.family.currency %>
+<section class="privacy-sensitive" aria-labelledby="<%= dom_id(run, :chart) %>">
+  <h3 id="<%= dom_id(run, :chart) %>" class="text-sm font-medium text-primary"><%= run.chart_spec.fetch("title") %></h3>
+  <div class="mt-3 h-64 rounded-lg border border-primary bg-container-inset p-3"
+       data-controller="transaction-analysis-chart"
+       data-transaction-analysis-chart-data-value="<%= chart_data.to_json %>"
+       data-transaction-analysis-chart-type-value="<%= run.chart_spec.fetch("type") %>"
+       data-transaction-analysis-chart-aria-label-value="<%= t(".aria_label", title: run.chart_spec.fetch("title")) %>"></div>
+  <div class="mt-3 overflow-x-auto">
+    <table class="min-w-full text-left text-xs">
+      <caption class="sr-only"><%= t(".table_caption", title: run.chart_spec.fetch("title")) %></caption>
+      <thead class="border-b border-divider text-secondary">
+        <tr>
+          <th scope="col" class="px-2 py-2 font-medium"><%= t(".table.label") %></th>
+          <th scope="col" class="px-2 py-2 text-right font-medium"><%= t(".table.income") %></th>
+          <th scope="col" class="px-2 py-2 text-right font-medium"><%= t(".table.expenses") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% chart_data.each do |point| %>
+          <tr class="border-b border-divider last:border-0">
+            <td class="px-2 py-2 text-primary"><%= point[:label] %></td>
+            <td class="px-2 py-2 text-right text-primary tabular-nums"><%= transaction_analysis_chart_value(point[:income], chart_currency) %></td>
+            <td class="px-2 py-2 text-right text-primary tabular-nums"><%= transaction_analysis_chart_value(point[:expenses], chart_currency) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</section>

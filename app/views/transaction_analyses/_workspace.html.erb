@@ -1,0 +1,39 @@
+<div class="max-w-6xl mx-auto py-6 lg:py-10">
+  <% if @transaction_analysis&.persisted? %>
+    <div class="grid gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
+      <aside class="min-w-0 space-y-4" aria-label="<%= t(".saved_analyses") %>">
+        <%= render "transaction_analyses/saved_analyses" %>
+      </aside>
+
+      <section class="min-w-0 space-y-5" aria-labelledby="analysis-workspace-title">
+        <%= render "transaction_analyses/analysis_form", analysis: @transaction_analysis %>
+        <div class="space-y-5" aria-label="<%= t(".run_history") %>">
+          <% @runs.each do |run| %>
+            <%= render "transaction_analyses/run", run: run, analysis: @transaction_analysis %>
+          <% end %>
+        </div>
+      </section>
+    </div>
+  <% else %>
+    <%= render DS::Card.new(class: "max-w-xl mx-auto") do %>
+      <% unless @ai_configured %>
+        <%= render DS::Alert.new(title: t("transaction_analyses.analysis_form.ai_configuration_title"), message: t("transaction_analyses.analysis_form.ai_configuration_description"), variant: :warning, live: :status) do %>
+          <%= render DS::Link.new(text: t("transaction_analyses.analysis_form.configure_ai"), href: settings_providers_path) %>
+        <% end %>
+      <% end %>
+      <%= render DS::EmptyState.new(
+        icon: "scan-search",
+        title: t(".empty_title"),
+        description: t(".empty_description")
+      ) do |empty_state| %>
+        <% empty_state.with_action do %>
+          <%= form_with model: TransactionAnalysis.new, class: "flex flex-col sm:flex-row gap-2 w-full sm:w-auto" do |form| %>
+            <%= form.label :title, t(".new_analysis_label"), class: "sr-only" %>
+            <%= form.text_field :title, required: true, maxlength: 200, placeholder: t(".new_analysis_placeholder"), class: "min-w-0 rounded-lg border border-primary bg-container-inset px-3 py-2 text-sm text-primary focus-ring" %>
+            <%= render DS::Button.new(text: t(".create_analysis"), icon: "plus", type: "submit") %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

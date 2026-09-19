@@ -1,0 +1,34 @@
+<%= render DS::Card.new(class: "gap-4") do %>
+  <div class="flex items-center justify-between gap-3">
+    <h1 class="text-lg font-medium text-primary"><%= t(".saved_analyses") %></h1>
+    <%= icon("scan-search", size: "sm") %>
+  </div>
+
+  <nav class="space-y-1" aria-label="<%= t(".saved_analyses") %>">
+    <% @analyses.each do |analysis| %>
+      <%= link_to transaction_analysis_path(analysis), class: class_names("block rounded-lg px-3 py-2 focus-ring", analysis == @transaction_analysis ? "bg-container-inset text-primary" : "text-secondary hover:bg-container-inset-hover hover:text-primary"), aria: { current: ("page" if analysis == @transaction_analysis) } do %>
+        <span class="block truncate text-sm font-medium"><%= analysis.title %></span>
+        <span class="block text-xs text-subdued mt-0.5"><%= l(analysis.updated_at, format: :short) %></span>
+      <% end %>
+    <% end %>
+  </nav>
+
+  <div class="border-t border-divider pt-4 space-y-2">
+    <%= form_with model: TransactionAnalysis.new, class: "space-y-2" do |form| %>
+      <%= form.label :title, t(".new_analysis_label"), class: "text-xs font-medium text-secondary" %>
+      <div class="flex gap-2">
+        <%= form.text_field :title, required: true, maxlength: 200, placeholder: t(".new_analysis_placeholder"), class: "min-w-0 flex-1 rounded-lg border border-primary bg-container-inset px-3 py-2 text-sm text-primary focus-ring" %>
+        <%= render DS::Button.new(text: t(".new"), icon: "plus", type: "submit", size: :sm) %>
+      </div>
+    <% end %>
+
+    <%= form_with model: @transaction_analysis, class: "space-y-2" do |form| %>
+      <%= form.label :title, t(".rename_label"), class: "text-xs font-medium text-secondary" %>
+      <div class="flex gap-2">
+        <%= form.text_field :title, required: true, maxlength: 200, class: "min-w-0 flex-1 rounded-lg border border-primary bg-container-inset px-3 py-2 text-sm text-primary focus-ring" %>
+        <%= render DS::Button.new(text: t(".rename"), variant: "outline", type: "submit", size: :sm) %>
+      </div>
+    <% end %>
+    <%= render DS::Button.new(text: t(".delete"), href: transaction_analysis_path(@transaction_analysis), method: :delete, variant: "outline_destructive", size: :sm, confirm: t(".delete_confirm"), form: { data: { turbo_frame: "_top" } }) %>
+  </div>
+<% end %>
