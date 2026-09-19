@@ -1,0 +1,54 @@
+{
+  "id": "2026-09-19-transaction-analysis-workspace-notes",
+  "title": "Implementation notes — Transaction analysis workspace",
+  "subtitle": "starting · 2026-09-19 12:33",
+  "introTitle": "How to use",
+  "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
+  "actions": [
+    "acknowledge",
+    "discuss",
+    "revert"
+  ],
+  "groups": [
+    {
+      "id": "phase-1",
+      "label": "Phase 1 — Persistence, lifecycle, and ownership",
+      "badge": "P1"
+    },
+    {
+      "id": "phase-2",
+      "label": "Phase 2 — Deterministic calculations and evidence snapshots",
+      "badge": "P2"
+    },
+    {
+      "id": "phase-3",
+      "label": "Phase 3 — Constrained provider orchestration",
+      "badge": "P3"
+    },
+    {
+      "id": "phase-4",
+      "label": "Phase 4 — Analysis workspace UI",
+      "badge": "P4"
+    },
+    {
+      "id": "phase-5",
+      "label": "Phase 5 — Security, regression verification, and documentation",
+      "badge": "P5"
+    }
+  ],
+  "items": [
+    {
+      "id": "N1",
+      "group": "phase-1",
+      "title": "Committed execution metadata before the runner",
+      "where": "docs/plans/2026-09-19-transaction-analysis-workspace.md",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "The run-plan driver owns commits between implementation phases.",
+        "What I did": "Created one local setup commit containing the approved plan, governed workstream state, and empty implementation-notes artifact before starting the driver.",
+        "Why": "The driver refuses a dirty tree, while the notes protocol requires the decision artifact to exist before implementation starts. No application code is included in this setup commit.",
+        "Risk": "The branch has one metadata-only commit before the phase commits."
+      }
+    }
+  ]
+}
