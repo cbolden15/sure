@@ -205,9 +205,15 @@ class Settings::HostingsController < ApplicationController
       Setting.anthropic_model = hosting_params[:anthropic_model].presence
     end
 
+    update_encrypted_setting(:gemini_api_key)
+
+    if hosting_params.key?(:gemini_model)
+      Setting.gemini_model = hosting_params[:gemini_model].presence
+    end
+
     if hosting_params.key?(:llm_provider)
       provider = hosting_params[:llm_provider].to_s
-      if %w[openai anthropic].include?(provider)
+      if Provider::Registry::LLM_PROVIDER_KEYS.include?(provider)
         Setting.llm_provider = provider
       end
     end
@@ -249,6 +255,7 @@ class Settings::HostingsController < ApplicationController
     @openai_model_input = hosting_params[:openai_model] if hosting_params.key?(:openai_model)
     @anthropic_base_url_input = hosting_params[:anthropic_base_url] if hosting_params.key?(:anthropic_base_url)
     @anthropic_model_input = hosting_params[:anthropic_model] if hosting_params.key?(:anthropic_model)
+    @gemini_model_input = hosting_params[:gemini_model] if hosting_params.key?(:gemini_model)
     flash.now[:alert] = error.message
     render :show, status: :unprocessable_entity
   end
@@ -273,7 +280,7 @@ class Settings::HostingsController < ApplicationController
     # Strong parameters for the self-hosting settings form.
     def hosting_params
       return ActionController::Parameters.new unless params.key?(:setting)
-      params.require(:setting).permit(:onboarding_state, :require_email_confirmation, :invite_only_default_family_id, :brand_fetch_client_id, :brand_fetch_high_res_logos, :twelve_data_api_key, :tiingo_api_key, :eodhd_api_key, :alpha_vantage_api_key, :tinkoff_invest_api_key, :mansa_api_key, :rentcast_api_key, :realie_api_key, :openai_access_token, :openai_uri_base, :openai_model, :openai_json_mode, :anthropic_access_token, :anthropic_base_url, :anthropic_model, :llm_provider, :llm_context_window, :llm_max_response_tokens, :llm_max_items_per_call, :openai_request_timeout, :ai_response_timeout, :exchange_rate_provider, :securities_provider, :syncs_include_pending, :auto_sync_enabled, :auto_sync_time, :external_assistant_url, :external_assistant_token, :external_assistant_agent_id, securities_providers: [])
+      params.require(:setting).permit(:onboarding_state, :require_email_confirmation, :invite_only_default_family_id, :brand_fetch_client_id, :brand_fetch_high_res_logos, :twelve_data_api_key, :tiingo_api_key, :eodhd_api_key, :alpha_vantage_api_key, :tinkoff_invest_api_key, :mansa_api_key, :rentcast_api_key, :realie_api_key, :openai_access_token, :openai_uri_base, :openai_model, :openai_json_mode, :anthropic_access_token, :anthropic_base_url, :anthropic_model, :gemini_api_key, :gemini_model, :llm_provider, :llm_context_window, :llm_max_response_tokens, :llm_max_items_per_call, :openai_request_timeout, :ai_response_timeout, :exchange_rate_provider, :securities_provider, :syncs_include_pending, :auto_sync_enabled, :auto_sync_time, :external_assistant_url, :external_assistant_token, :external_assistant_agent_id, securities_providers: [])
     end
 
     def update_assistant_type

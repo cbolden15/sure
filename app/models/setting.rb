@@ -14,6 +14,8 @@ class Setting < RailsSettings::Base
   field :anthropic_access_token, type: :string, default: ENV["ANTHROPIC_ACCESS_TOKEN"].presence || ENV["ANTHROPIC_API_KEY"].presence
   field :anthropic_model, type: :string, default: ENV["ANTHROPIC_MODEL"]
   field :anthropic_base_url, type: :string, default: ENV["ANTHROPIC_BASE_URL"]
+  field :gemini_api_key, type: :string, default: ENV["GEMINI_API_KEY"]
+  field :gemini_model, type: :string, default: ENV["GEMINI_MODEL"]
   field :llm_provider, type: :string, default: ENV.fetch("LLM_PROVIDER", "openai")
 
   # LLM token budget (applies to every outbound LLM call: chat, auto-categorize,
@@ -105,6 +107,7 @@ class Setting < RailsSettings::Base
       realie_api_key
       openai_access_token
       anthropic_access_token
+      gemini_api_key
       external_assistant_token
     ].freeze
 

@@ -202,7 +202,7 @@ class User < ApplicationRecord
     when "external"
       Assistant::External.available_for?(self)
     else
-      openai_configured? || anthropic_configured?
+      openai_configured? || anthropic_configured? || gemini_configured?
     end
   end
 
@@ -212,6 +212,10 @@ class User < ApplicationRecord
 
   def anthropic_configured?
     Provider::Anthropic.configured?
+  end
+
+  def gemini_configured?
+    Provider::Gemini.configured?
   end
 
   def ai_enabled?

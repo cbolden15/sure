@@ -152,6 +152,7 @@ en:
             openai_credentials: OpenAI credentials
             openai_compatible_credentials: OpenAI-compatible API credentials
             anthropic_credentials: Anthropic credentials
+            gemini_credentials: Google Gemini credentials
             adapter: Adapter
             adapter_available: Adapter available
             pgvector_extension: PostgreSQL vector extension
@@ -169,6 +170,7 @@ en:
             openai: OpenAI
             openai_compatible: OpenAI-compatible
             anthropic: Anthropic
+            gemini: Google Gemini
             ollama: Ollama
             openrouter: OpenRouter
             together: Together

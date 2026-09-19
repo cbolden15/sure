@@ -13,27 +13,27 @@ Sure includes an AI assistant that can help users understand their financial dat
 
 ## Architecture: Two AI Pipelines
 
-Sure has **two separate AI systems** that operate independently. Understanding this is important because they have different configuration requirements.
+Sure has **two separate AI systems**. The built-in workflows share one selected LLM provider, while an external assistant replaces chat only.
 
 ### 1. Chat Assistant (conversational)
 
-The interactive chat where users ask questions about their finances. Routes through one of two backends:
+The interactive chat where users ask questions about their finances. It routes through one of two backends:
 
-- **Builtin** (default): Uses the OpenAI-compatible provider configured via `OPENAI_ACCESS_TOKEN` / `OPENAI_URI_BASE` / `OPENAI_MODEL`. Calls Sure's function tools directly (get_accounts, get_transactions, etc.).
+- **Builtin** (default): Uses the selected OpenAI, Anthropic, or Google Gemini provider. Calls Sure's function tools directly (get_accounts, get_transactions, etc.).
 - **External**: Delegates the entire conversation to a remote AI agent. The agent calls back to Sure via MCP to access financial data. Set `ASSISTANT_TYPE=external` as a global override, or configure each family's assistant type in Settings.
 
 ### 2. Auto-Categorization and Merchant Detection (background)
 
-Background jobs that classify transactions and detect merchants. These **always** use the OpenAI-compatible provider (`OPENAI_ACCESS_TOKEN`), regardless of what the chat assistant uses. They rely on structured function calling with JSON schemas, not conversational chat.
+Background jobs that classify transactions and detect merchants use the same selected built-in provider. They rely on structured function calling with JSON schemas, not conversational chat.
 
 ### What this means in practice
 
 | Setting | Chat assistant | Auto-categorization |
 |---------|---------------|---------------------|
-| `ASSISTANT_TYPE=builtin` (default) | Uses OpenAI provider | Uses OpenAI provider |
-| `ASSISTANT_TYPE=external` | Uses external agent | Still uses OpenAI provider |
+| `ASSISTANT_TYPE=builtin` (default) | Uses selected LLM provider | Uses selected LLM provider |
+| `ASSISTANT_TYPE=external` | Uses external agent | Uses selected LLM provider |
 
-If you use an external agent for chat, you still need `OPENAI_ACCESS_TOKEN` set for auto-categorization and merchant detection to work. The two systems are fully independent.
+If you use an external agent for chat, configure at least one built-in provider for auto-categorization and merchant detection. Set `LLM_PROVIDER` to `openai`, `anthropic`, or `gemini`; if the selected provider has no credentials, Sure falls back to another configured provider.
 
 ## Quickstart: OpenAI Token
 
@@ -108,7 +108,7 @@ The amount of VRAM (GPU memory) you need depends on the model size:
 
 ## Cloud Providers
 
-Sure supports any OpenAI-compatible API endpoint. Here are tested providers:
+Sure has first-class OpenAI, Anthropic, and Google Gemini providers. It also supports custom OpenAI-compatible endpoints.
 
 ### OpenAI (Primary Support)
 
@@ -130,32 +130,32 @@ OPENAI_ACCESS_TOKEN=sk-proj-...
 
 **Pricing:** See [OpenAI Pricing](https://openai.com/api/pricing/)
 
-### Google Gemini (via OpenRouter)
+### Google Gemini
 
-[OpenRouter](https://openrouter.ai/) provides access to many models including Gemini:
+Create a key in [Google AI Studio](https://aistudio.google.com/app/apikey), then configure Gemini directly:
 
 ```bash
-OPENAI_ACCESS_TOKEN=your-openrouter-api-key
-OPENAI_URI_BASE=https://openrouter.ai/api/v1
-OPENAI_MODEL=google/gemini-2.0-flash-exp
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-gemini-api-key
+# Optional; defaults to gemini-3.8-flash
+GEMINI_MODEL=gemini-3.8-flash
+# Optional; defaults to 60 seconds
+GEMINI_REQUEST_TIMEOUT=60
 ```
 
-**Why OpenRouter?**
-- Single API for multiple providers
-- Competitive pricing
-- Automatic fallbacks
-- Usage tracking
+The Gemini provider supports chat, tool calls, structured output, transaction categorization, merchant detection, and PDF processing through Google's OpenAI-compatible endpoint. Set `GEMINI_SUPPORTS_PDF_PROCESSING=false` if the selected model cannot process PDF/image input.
 
-**Recommended Gemini models via OpenRouter:**
-- `google/gemini-2.5-flash` - Fast and capable
-- `google/gemini-2.5-pro` - High quality, good for complex queries
+Gemini does not provide OpenAI's hosted vector-store API. Sure therefore defaults document search to pgvector when Gemini is selected. Configure a compatible embeddings endpoint as described in [Pgvector (Self-Hosted)](#pgvector-self-hosted).
 
-### Anthropic Claude (via OpenRouter)
+See Google's [OpenAI compatibility documentation](https://ai.google.dev/gemini-api/docs/openai) and [model list](https://ai.google.dev/gemini-api/docs/models).
+
+### Anthropic Claude
 
 ```bash
-OPENAI_ACCESS_TOKEN=your-openrouter-api-key
-OPENAI_URI_BASE=https://openrouter.ai/api/v1
-OPENAI_MODEL=anthropic/claude-3.5-sonnet
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-anthropic-api-key
+# Optional
+ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
 **Recommended Claude models:**
@@ -362,11 +362,7 @@ For self-hosted deployments, you can configure AI settings through the web inter
 
 1. Go to **Settings** → **Self-Hosting**
 2. Scroll to the **AI Provider** section
-3. Configure the provider:
-   - **Access Token** - Your API key
-   - **API Base URL** - Custom endpoint (leave blank for OpenAI)
-   - **Model** - Model name (required for custom endpoints)
-   - **JSON Mode** - Structured-output format; `Auto` suits most models
+3. Select OpenAI, Anthropic, or Google Gemini, then enter that provider's API key and optional model.
 4. Optionally tune **Token Budget** — Context Window, Max Response Tokens and Max Items Per Batch. The defaults are conservative so small-context local models work out of the box; raise them for cloud or large-context models.
 5. Optionally set **Chat Response Timeout** — how long the chat waits for a whole turn before showing a "no response" error (default 90s). Raise it for slow local models; see [Chat Errors While the Model Is Still Generating](#chat-errors-while-the-model-is-still-generating).
 
@@ -374,7 +370,7 @@ For self-hosted deployments, you can configure AI settings through the web inter
 
 ## External AI Assistant
 
-Instead of using the built-in LLM (which calls OpenAI or a local model directly), you can delegate chat to an **external AI agent**. The agent receives the conversation, can call back to Sure's financial data via MCP, and streams a response.
+Instead of using the selected built-in LLM, you can delegate chat to an **external AI agent**. The agent receives the conversation, can call back to Sure's financial data via MCP, and streams a response.
 
 This is useful when:
 - You have a custom AI agent with domain knowledge, memory, or personality
@@ -385,7 +381,7 @@ This is useful when:
 > **Set `ASSISTANT_TYPE=external` to route all users to the external agent.** Without it, routing falls back to each family's `assistant_type` DB column (configurable per-family in the Settings UI), then defaults to `"builtin"`. If you want a global override that applies to every family regardless of their UI setting, set the env var. If you only want specific families to use the external agent, skip the env var and configure it per-family in Settings.
 
 > [!NOTE]
-> The external assistant handles **chat only**. Auto-categorization and merchant detection still use the OpenAI-compatible provider (`OPENAI_ACCESS_TOKEN`). See [Architecture: Two AI Pipelines](#architecture-two-ai-pipelines) for details.
+> The external assistant handles **chat only**. Auto-categorization and merchant detection still use the selected built-in OpenAI, Anthropic, or Gemini provider. See [Architecture: Two AI Pipelines](#architecture-two-ai-pipelines) for details.
 
 ### How It Works
 
@@ -652,7 +648,7 @@ end
 
 #### `Assistant::Builtin`
 
-The default implementation that uses the configured OpenAI-compatible LLM provider. Located in `app/models/assistant/builtin.rb`.
+The default implementation that uses the selected OpenAI, Anthropic, or Google Gemini provider. Located in `app/models/assistant/builtin.rb`.
 
 **Features:**
 - Uses `Assistant::Provided` for LLM provider selection
@@ -1223,8 +1219,8 @@ Restart `web` and `worker` after changing the environment variables, and make su
 **Symptom:** "Provider not found" or similar error
 
 **Fix:**
-1. Check `OPENAI_ACCESS_TOKEN` is set
-2. For custom providers, verify `OPENAI_URI_BASE` and `OPENAI_MODEL`
+1. Check that the selected provider's API key is set: `OPENAI_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`
+2. Check `LLM_PROVIDER` is `openai`, `anthropic`, or `gemini`
 3. Restart Sure after changing environment variables
 4. Check logs for specific error messages
 
@@ -1513,8 +1509,9 @@ Super admins can open **System health → AI status** at
 `/admin/system_health?tab=ai`. Opening that URL runs bounded, non-destructive
 live checks against the effective configuration:
 
-- OpenAI-compatible and Anthropic providers must return the configured model
-  from their models API.
+- Hosted OpenAI and Anthropic providers must expose the configured model.
+  OpenAI-compatible and Gemini providers must complete a minimal chat request
+  with it.
 - The configured model must complete one trivial function call, sent the way
   the assistant sends its own tools. A model that serves plain chat but rejects
   or ignores the `tools` parameter cannot answer questions about your data.

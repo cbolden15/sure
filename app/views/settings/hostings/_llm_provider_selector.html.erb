@@ -1,8 +1,16 @@
 <%
-  active = Setting.llm_provider.to_s.downcase == "anthropic" ? "anthropic" : "openai"
+  active = Provider::Registry.normalize_llm_provider(Setting.llm_provider)
   locked = ENV["LLM_PROVIDER"].present?
-  providers = [ [ "openai", t(".provider_openai") ], [ "anthropic", t(".provider_anthropic") ] ]
-  active_configured = active == "anthropic" ? Provider::Anthropic.configured? : Provider::Openai.configured?
+  providers = [
+    [ "openai", t(".provider_openai") ],
+    [ "anthropic", t(".provider_anthropic") ],
+    [ "gemini", t(".provider_gemini") ]
+  ]
+  active_configured = {
+    "openai" => Provider::Openai,
+    "anthropic" => Provider::Anthropic,
+    "gemini" => Provider::Gemini
+  }.fetch(active).configured?
 %>
 
 <div class="space-y-3">

@@ -27,7 +27,7 @@ class Settings::HostingsControllerTest < ActionDispatch::IntegrationTest
   teardown do
     # These tests persist global Setting.* values; reset them so state can't
     # leak into later (order-dependent) tests.
-    %i[anthropic_access_token anthropic_base_url anthropic_model llm_provider twelve_data_api_key openai_access_token openai_request_timeout ai_response_timeout external_assistant_token rentcast_api_key realie_api_key].each do |key|
+    %i[anthropic_access_token anthropic_base_url anthropic_model gemini_api_key gemini_model llm_provider twelve_data_api_key openai_access_token openai_request_timeout ai_response_timeout external_assistant_token rentcast_api_key realie_api_key].each do |key|
       Setting.public_send("#{key}=", nil)
     end
   end
@@ -281,6 +281,35 @@ class Settings::HostingsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "can update Gemini API key and model when self hosting is enabled" do
+    with_self_hosting do
+      patch settings_hosting_url, params: { setting: { gemini_api_key: "fake-gemini-key", gemini_model: "gemini-3.8-flash" } }
+
+      assert_equal "fake-gemini-key", Setting.gemini_api_key
+      assert_equal "gemini-3.8-flash", Setting.gemini_model
+    end
+  end
+
+  test "can clear Gemini API key by submitting a blank value" do
+    with_self_hosting do
+      Setting.gemini_api_key = "previous-key"
+
+      patch settings_hosting_url, params: { setting: { gemini_api_key: "" } }
+
+      assert_nil Setting.gemini_api_key
+    end
+  end
+
+  test "ignores redacted Gemini API key placeholder" do
+    with_self_hosting do
+      Setting.gemini_api_key = "previous-key"
+
+      patch settings_hosting_url, params: { setting: { gemini_api_key: "********" } }
+
+      assert_equal "previous-key", Setting.gemini_api_key
+    end
+  end
+
   test "can update anthropic base_url and model" do
     with_self_hosting do
       patch settings_hosting_url, params: { setting: { anthropic_base_url: "https://bedrock.example.com", anthropic_model: "claude-opus-4-7" } }
@@ -330,6 +359,14 @@ class Settings::HostingsControllerTest < ActionDispatch::IntegrationTest
       patch settings_hosting_url, params: { setting: { llm_provider: "anthropic" } }
 
       assert_equal "anthropic", Setting.llm_provider
+    end
+  end
+
+  test "can update llm_provider to Gemini" do
+    with_self_hosting do
+      patch settings_hosting_url, params: { setting: { llm_provider: "gemini" } }
+
+      assert_equal "gemini", Setting.llm_provider
     end
   end
 

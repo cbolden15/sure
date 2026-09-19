@@ -332,6 +332,16 @@ class UserTest < ActiveSupport::TestCase
     Setting.openai_access_token = previous
   end
 
+  test "ai_available? returns true when Gemini API key is configured" do
+    with_self_hosting do
+      Provider::Openai.stubs(:configured?).returns(false)
+      Provider::Anthropic.stubs(:configured?).returns(false)
+      Provider::Gemini.stubs(:configured?).returns(true)
+
+      assert @user.ai_available?
+    end
+  end
+
   test "ai_available? returns true when external assistant is configured and family type is external" do
     Rails.application.config.app_mode.stubs(:self_hosted?).returns(true)
     previous = Setting.openai_access_token

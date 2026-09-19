@@ -7,6 +7,7 @@ require "uri"
 class AiHealth
   OPENAI_DEFAULT_ENDPOINT = "https://api.openai.com/v1".freeze
   ANTHROPIC_DEFAULT_ENDPOINT = "https://api.anthropic.com".freeze
+  GEMINI_DEFAULT_ENDPOINT = Provider::Gemini::DEFAULT_ENDPOINT
   OPENAI_COMPATIBLE_PROVIDER_DOMAINS = {
     openrouter: %w[openrouter.ai],
     together: %w[together.ai together.xyz],
@@ -42,6 +43,10 @@ class AiHealth
 
   def anthropic_credentials_configured?
     @anthropic_credentials_configured
+  end
+
+  def gemini_credentials_configured?
+    @gemini_credentials_configured
   end
 
   def llm_configured?
@@ -157,6 +162,7 @@ class AiHealth
       @selected_llm_provider = selected_provider_name(@selected_llm_protocol)
       @openai_credentials_configured = safely(false) { Provider::Openai.configured? }
       @anthropic_credentials_configured = safely(false) { Provider::Anthropic.configured? }
+      @gemini_credentials_configured = safely(false) { Provider::Gemini.configured? }
       @llm_provider = safely(nil) { Provider::Registry.preferred_llm_provider }
       @effective_llm_protocol = protocol_name(@llm_provider)
       @effective_llm_provider = effective_provider_name(@effective_llm_protocol)
@@ -171,7 +177,7 @@ class AiHealth
       @pdf_processing_capable = safely(false) do
         @llm_provider&.supports_pdf_processing?(model: llm_model)
       end
-      @pdf_text_extraction_capable = @pdf_processing_capable && @effective_llm_protocol == :openai
+      @pdf_text_extraction_capable = @pdf_processing_capable && @effective_llm_protocol.in?([ :openai, :gemini ])
       @pdf_vision_processing_capable = @pdf_processing_capable
 
       @openai_endpoint = redact_endpoint(openai_uri_base.presence || OPENAI_DEFAULT_ENDPOINT)
@@ -212,7 +218,8 @@ class AiHealth
           endpoint: @llm_raw_endpoint,
           access_token: @llm_access_token,
           model: llm_model,
-          openai_compatible: @effective_llm_protocol == :openai && openai_compatible_endpoint?
+          openai_compatible: @effective_llm_protocol == :gemini ||
+            (@effective_llm_protocol == :openai && openai_compatible_endpoint?)
         )
         @function_calling_probe = probe.function_calling(
           provider: @effective_llm_protocol,
@@ -227,7 +234,7 @@ class AiHealth
             endpoint: @llm_raw_endpoint,
             access_token: @llm_access_token,
             model: llm_model,
-            openai_compatible: openai_compatible_endpoint?
+            openai_compatible: @effective_llm_protocol == :gemini || openai_compatible_endpoint?
           )
         end
         if @pdf_vision_processing_capable
@@ -236,7 +243,8 @@ class AiHealth
             endpoint: @llm_raw_endpoint,
             access_token: @llm_access_token,
             model: llm_model,
-            openai_compatible: @effective_llm_protocol == :openai && openai_compatible_endpoint?
+            openai_compatible: @effective_llm_protocol == :gemini ||
+              (@effective_llm_protocol == :openai && openai_compatible_endpoint?)
           )
         end
       end
@@ -286,11 +294,12 @@ class AiHealth
     end
 
     def normalized_llm_provider(value)
-      value.to_s == "anthropic" ? :anthropic : :openai
+      Provider::Registry.normalize_llm_provider(value).to_sym
     end
 
     def protocol_name(provider)
       case provider
+      when Provider::Gemini then :gemini
       when Provider::Openai then :openai
       when Provider::Anthropic then :anthropic
       end
@@ -329,6 +338,7 @@ class AiHealth
     def effective_model(provider)
       case provider
       when :anthropic then Provider::Anthropic.effective_model
+      when :gemini then Provider::Gemini.effective_model
       else Provider::Openai.effective_model
       end
     end
@@ -339,20 +349,30 @@ class AiHealth
     end
 
     def default_endpoint(provider)
-      provider == :anthropic ? ANTHROPIC_DEFAULT_ENDPOINT : OPENAI_DEFAULT_ENDPOINT
+      case provider
+      when :anthropic then ANTHROPIC_DEFAULT_ENDPOINT
+      when :gemini then GEMINI_DEFAULT_ENDPOINT
+      else OPENAI_DEFAULT_ENDPOINT
+      end
     end
 
     def raw_endpoint(provider)
-      provider == :anthropic ? anthropic_base_url : openai_uri_base
+      case provider
+      when :anthropic then anthropic_base_url
+      when :gemini then GEMINI_DEFAULT_ENDPOINT
+      else openai_uri_base
+      end
     end
 
     def access_token(provider)
-      if provider == :anthropic
+      case provider
+      when :anthropic
         ENV["ANTHROPIC_ACCESS_TOKEN"].presence ||
           ENV["ANTHROPIC_API_KEY"].presence ||
           Setting.anthropic_access_token
-      else
-        openai_access_token
+      when :gemini
+        ENV["GEMINI_API_KEY"].presence || Setting.gemini_api_key
+      else openai_access_token
       end
     end
 
@@ -362,10 +382,10 @@ class AiHealth
 
     # Reports the timeout used by normal LLM requests for the selected provider.
     def request_timeout(provider)
-      if provider == :anthropic
-        ENV.fetch("ANTHROPIC_REQUEST_TIMEOUT", 600).to_i
-      else
-        Provider::Openai.request_timeout
+      case provider
+      when :anthropic then ENV.fetch("ANTHROPIC_REQUEST_TIMEOUT", 600).to_i
+      when :gemini then Provider::Gemini.request_timeout
+      else Provider::Openai.request_timeout
       end
     end
 
