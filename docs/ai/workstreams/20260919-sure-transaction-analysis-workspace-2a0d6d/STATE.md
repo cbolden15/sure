@@ -7,3 +7,8 @@
 - Branch: feat/transaction-analysis-workspace
 - Objective: Implement the transaction analysis workspace with deterministic calculations, constrained AI, saved versions, evidence, and UI
 - Created date: 2026-09-19
+- Status: active
+- Current milestone: Phase 1 accepted after independent review
+- Accepted head: dcb817f6c
+- Last verification: 24 focused tests, 119 assertions, 0 failures; RuboCop clean on the Phase 1 review-fix files
+- Next action: Resume the governed plan at Phase 2
