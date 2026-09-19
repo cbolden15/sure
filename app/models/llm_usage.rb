@@ -51,8 +51,10 @@ class LlmUsage < ApplicationRecord
       "o3-pro" => { prompt: 20.00, completion: 80.00 }
     },
     "google" => {
+      # Introductory Gemini 3.8 Flash pricing through December 31, 2026.
+      "gemini-3.8-flash" => { prompt: 0.75, completion: 3.75 },
       "gemini-2.5-pro" => { prompt: 1.25, completion: 10.00 },
-      "gemini-2.5-flash" => { prompt: 0.3, completion: 2.50 }
+      "gemini-2.5-flash" => { prompt: 0.30, completion: 2.50 }
     },
     # Anthropic pricing per 1M tokens (Claude 4.x family, as of May 2026)
     # Source: https://www.anthropic.com/pricing
@@ -129,6 +131,7 @@ class LlmUsage < ApplicationRecord
     # correct even when we can't compute a per-token rate (custom endpoints
     # bill via their own provider, not Anthropic directly).
     return "anthropic" if model.start_with?("anthropic.", "anthropic/")
+    return "google" if model.start_with?("gemini-", "google/gemini")
 
     # Check each provider to see if they have pricing for this model
     PRICING.each do |provider_name, provider_pricing|

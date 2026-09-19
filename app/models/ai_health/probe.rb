@@ -78,6 +78,8 @@ class AiHealth
             response = openai_client(access_token:, endpoint:).models.list
             openai_model_ids(response).include?(model)
           end
+        when :gemini
+          openai_chat_completion_available?(access_token:, endpoint:, model:)
         when :anthropic
           model_info = anthropic_client(access_token:, endpoint:).models.retrieve(model)
           model_info.respond_to?(:id) && model_info.id.present?
@@ -171,7 +173,7 @@ class AiHealth
         ) do
           result = Timeout.timeout(timeout) do
             case provider
-            when :openai
+            when :openai, :gemini
               Provider::Openai::PdfProcessor.new(
                 openai_client(access_token:, endpoint:),
                 model: model,

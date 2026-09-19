@@ -149,6 +149,12 @@
           <%= t("admin.system_health.show.ai.values.#{ai_health.anthropic_credentials_configured? ? :configured : :not_configured}") %>
         </dd>
       </div>
+      <div>
+        <dt class="text-secondary"><%= t("admin.system_health.show.ai.labels.gemini_credentials") %></dt>
+        <dd class="mt-1 font-medium text-primary">
+          <%= t("admin.system_health.show.ai.values.#{ai_health.gemini_credentials_configured? ? :configured : :not_configured}") %>
+        </dd>
+      </div>
       <% if ai_health.llm_probe.failure_code %>
         <div>
           <dt class="text-secondary"><%= t("admin.system_health.show.ai.labels.failure_reason") %></dt>

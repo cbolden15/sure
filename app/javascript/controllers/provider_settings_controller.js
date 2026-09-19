@@ -5,8 +5,8 @@ import { Controller } from "@hotwired/stimulus";
 // A DS::SegmentedControl selects the active provider: clicking a segment
 // reveals that provider's settings panel immediately (no reload flash),
 // updates the hidden llm_provider field, and submits the selector form to
-// persist the choice. Both panels stay in the DOM so either provider can be
-// configured; the inactive one is `hidden`.
+// persist the choice. Every panel stays in the DOM so any provider can be
+// configured; inactive panels are `hidden`.
 export default class extends Controller {
   static targets = ["panel", "segment", "field", "form"];
   static values = { active: String };
@@ -18,10 +18,7 @@ export default class extends Controller {
 
     this.segmentTargets.forEach((segment) => {
       const isActive = segment.dataset.provider === this.activeValue;
-      segment.classList.toggle(
-        "segmented-control__segment--active",
-        isActive,
-      );
+      segment.classList.toggle("segmented-control__segment--active", isActive);
       segment.setAttribute("aria-pressed", isActive.toString());
     });
 

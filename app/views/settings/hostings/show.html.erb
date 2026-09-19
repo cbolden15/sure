@@ -3,17 +3,22 @@
   <%= render "settings/hostings/assistant_settings" %>
 <% end %>
 <%= settings_section title: t(".general") do %>
+  <% active_llm_provider = Provider::Registry.normalize_llm_provider(Setting.llm_provider) %>
   <div class="space-y-6"
        data-controller="provider-settings"
-       data-provider-settings-active-value="<%= Setting.llm_provider %>">
+       data-provider-settings-active-value="<%= active_llm_provider %>">
     <%= render "settings/hostings/llm_provider_selector" %>
     <%= tag.div data: { "provider-settings-target": "panel", provider: "openai" },
-                hidden: Setting.llm_provider != "openai" do %>
+                hidden: active_llm_provider != "openai" do %>
       <%= render "settings/hostings/openai_settings" %>
     <% end %>
     <%= tag.div data: { "provider-settings-target": "panel", provider: "anthropic" },
-                hidden: Setting.llm_provider != "anthropic" do %>
+                hidden: active_llm_provider != "anthropic" do %>
       <%= render "settings/hostings/anthropic_settings" %>
+    <% end %>
+    <%= tag.div data: { "provider-settings-target": "panel", provider: "gemini" },
+                hidden: active_llm_provider != "gemini" do %>
+      <%= render "settings/hostings/gemini_settings" %>
     <% end %>
     <%= render "settings/hostings/brand_fetch_settings" %>
   </div>

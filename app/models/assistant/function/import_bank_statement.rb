@@ -93,8 +93,7 @@ class Assistant::Function::ImportBankStatement < Assistant::Function
     end
 
     # Extract transactions from the PDF using the configured LLM provider.
-    # Honors Setting.llm_provider (issue #2113) — Provider::Anthropic implements
-    # extract_bank_statement (PR #1985).
+    # Honors Setting.llm_provider and lets each provider choose its default model.
     provider = Provider::Registry.preferred_llm_provider
     unless provider
       return {
@@ -106,7 +105,6 @@ class Assistant::Function::ImportBankStatement < Assistant::Function
 
     response = provider.extract_bank_statement(
       pdf_content: pdf_import.pdf_file_content,
-      model: openai_model,
       family: family
     )
 
@@ -182,9 +180,5 @@ class Assistant::Function::ImportBankStatement < Assistant::Function
           ]
         end
       end
-    end
-
-    def openai_model
-      ENV["OPENAI_MODEL"].presence || Provider::Openai::DEFAULT_MODEL
     end
 end
