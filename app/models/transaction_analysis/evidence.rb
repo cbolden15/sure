@@ -1,4 +1,5 @@
 class TransactionAnalysis::Evidence < ApplicationRecord
+  MAXIMUM_PER_RUN = 25
   belongs_to :run, class_name: "TransactionAnalysis::Run", foreign_key: :transaction_analysis_run_id,
                    inverse_of: :evidences
   belongs_to :source_transaction, class_name: "Transaction", foreign_key: :transaction_id, optional: true
@@ -9,6 +10,7 @@ class TransactionAnalysis::Evidence < ApplicationRecord
   validate :snapshot_contains_only_safe_fields
   validate :source_transaction_is_accessible
   validate :run_is_not_completed
+  validate :does_not_exceed_run_limit
 
   around_save :lock_parent_runs_for_write
   before_destroy :prevent_destroy_from_completed_run
@@ -39,6 +41,13 @@ class TransactionAnalysis::Evidence < ApplicationRecord
 
     def run_is_not_completed
       errors.add(:run, "is completed and immutable") if completed_parent_run?
+    end
+
+    def does_not_exceed_run_limit
+      return unless run
+      return unless new_record? && run.evidences.count >= MAXIMUM_PER_RUN
+
+      errors.add(:base, "may contain at most #{MAXIMUM_PER_RUN} citations")
     end
 
     def prevent_destroy_from_completed_run

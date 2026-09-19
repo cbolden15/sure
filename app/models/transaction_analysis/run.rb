@@ -40,27 +40,22 @@ class TransactionAnalysis::Run < ApplicationRecord
   def self.create_pending!(analysis:, user:, prompt:, account_ids: nil, start_date: nil, end_date: nil, all_history: false)
     raise InvalidScope, "analysis does not belong to user" unless analysis.user_id == user.id
 
-    accounts = resolve_accounts!(user, account_ids)
-    all_history = ActiveModel::Type::Boolean.new.cast(all_history) || false
-    end_on = parse_date!(end_date || Date.current, attribute: :end_date)
-    start_on = if all_history
-      earliest_transaction_date_for(accounts) || end_on
-    else
-      parse_date!(start_date || (end_on - 12.months), attribute: :start_date)
-    end
-
-    raise InvalidScope, "start date must be on or before end date" if start_on > end_on
+    resolved_scope = TransactionAnalysis::Scope.resolve!(
+      user: user,
+      account_ids: account_ids,
+      start_date: start_date,
+      end_date: end_date,
+      all_history: all_history
+    )
 
     analysis.runs.create!(
       prompt: prompt,
-      scope: {
-        "account_ids" => accounts.map { |account| account.id.to_s },
-        "account_labels" => accounts.map { |account| account.name },
-        "all_history" => all_history,
-        "start_date" => start_on.iso8601,
-        "end_date" => end_on.iso8601
-      }
+      scope: resolved_scope.snapshot
     )
+  rescue TransactionAnalysis::Scope::InaccessibleAccount => error
+    raise InaccessibleAccount, error.message
+  rescue TransactionAnalysis::Scope::InvalidScope => error
+    raise InvalidScope, error.message
   end
 
   def complete!(attributes = {})
@@ -100,21 +95,6 @@ class TransactionAnalysis::Run < ApplicationRecord
   end
 
   private
-    def self.resolve_accounts!(user, requested_ids)
-      ids = Array(requested_ids).reject(&:blank?).map(&:to_s).uniq
-      scope = user.accessible_accounts.visible
-      accounts = ids.empty? ? scope.order(:id).to_a : scope.where(id: ids).order(:id).to_a
-
-      raise InaccessibleAccount, "one or more selected accounts are inaccessible" unless ids.empty? || accounts.length == ids.length
-      raise InaccessibleAccount, "no visible accounts are available" if accounts.empty?
-
-      accounts
-    end
-
-    def self.earliest_transaction_date_for(accounts)
-      Transaction.with_entry.where(entries: { account_id: accounts.map(&:id) }).minimum("entries.date")
-    end
-
     def self.parse_date!(value, attribute:)
       Date.iso8601(value.to_s)
     rescue ArgumentError
