@@ -1,0 +1,197 @@
+{
+  "id": "2026-09-19-transaction-analysis-workspace-notes",
+  "title": "Implementation notes — Transaction analysis workspace",
+  "subtitle": "phase 5 accepted · 2026-09-19 17:11 CDT",
+  "introTitle": "How to use",
+  "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
+  "actions": [
+    "acknowledge",
+    "discuss",
+    "revert"
+  ],
+  "groups": [
+    {
+      "id": "phase-1",
+      "label": "Phase 1 — Persistence, lifecycle, and ownership",
+      "badge": "P1"
+    },
+    {
+      "id": "phase-2",
+      "label": "Phase 2 — Deterministic calculations and evidence snapshots",
+      "badge": "P2"
+    },
+    {
+      "id": "phase-3",
+      "label": "Phase 3 — Constrained provider orchestration",
+      "badge": "P3"
+    },
+    {
+      "id": "phase-4",
+      "label": "Phase 4 — Analysis workspace UI",
+      "badge": "P4"
+    },
+    {
+      "id": "phase-5",
+      "label": "Phase 5 — Security, regression verification, and documentation",
+      "badge": "P5"
+    }
+  ],
+  "items": [
+    {
+      "id": "N1",
+      "group": "phase-1",
+      "title": "Committed execution metadata before the runner",
+      "where": "docs/plans/2026-09-19-transaction-analysis-workspace.md",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "The run-plan driver owns commits between implementation phases.",
+        "What I did": "Created one local setup commit containing the approved plan, governed workstream state, and empty implementation-notes artifact before starting the driver.",
+        "Why": "The driver refuses a dirty tree, while the notes protocol requires the decision artifact to exist before implementation starts. No application code is included in this setup commit.",
+        "Risk": "The branch has one metadata-only commit before the phase commits."
+      }
+    },
+    {
+      "id": "N2",
+      "group": "phase-1",
+      "title": "Ran Rails verification in the devcontainer",
+      "where": ".devcontainer/docker-compose.yml",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Run the repository's focused tests and Ruby style checks before accepting the phase.",
+        "What I did": "Ran migrations, focused Rails tests, and RuboCop inside the repository devcontainer.",
+        "Why": "The host shell has macOS Ruby 2.6 and does not have the repository's required Bundler 2.6.7. The devcontainer provides the supported application toolchain.",
+        "Risk": "Local verification depends on Docker being available; the same checks should also run in CI."
+      }
+    },
+    {
+      "id": "N3",
+      "group": "phase-1",
+      "title": "Hardened lifecycle boundaries after independent review",
+      "where": "app/models/transaction_analysis/run.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Completed runs are immutable and every valid run has a rerunnable saved scope.",
+        "What I did": "Blocked direct destruction of completed runs, required pending status on creation, validated the canonical scope shape, converted malformed legacy reruns into a domain error, and allowed the planned optional data_version field.",
+        "Why": "A read-only review reproduced three lifecycle holes and then caught an exact-key validation rule that would have blocked Phase 2. The corrected patch passed the final review gate.",
+        "Risk": "ActiveRecord delete and raw SQL bypass model callbacks; preventing those internal code paths would require a database trigger."
+      }
+    },
+    {
+      "id": "N4",
+      "group": "phase-2",
+      "title": "Fail closed when saved calculation inputs drift",
+      "where": "app/models/transaction_analysis/scope.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "A saved run records a stable scope and data-version key, while the app owns all filtering and calculations.",
+        "What I did": "Included live transaction, entry, account-label, category, merchant, family-currency, and relevant exchange-rate dependencies in the scope hash. Each calculation rechecks account visibility and rejects a stale data version before reading rows.",
+        "Why": "Independent review reproduced both a post-construction authorization gap and a case where an exchange-rate edit changed totals without changing the saved scope version.",
+        "Risk": "Computing the version currently materializes the scoped transaction history and associations; large all-history scopes need performance measurement later."
+      }
+    },
+    {
+      "id": "N5",
+      "group": "phase-2",
+      "title": "Matched Sure's transfer and account-breakdown semantics",
+      "where": "app/models/transaction_analysis/calculator.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Calculations preserve Sure's existing transaction and currency conventions and expose only user-friendly account labels.",
+        "What I did": "Excluded funds movements and credit-card payments by default while retaining loan payments and investment contributions as expenses. Account breakdowns group by internal identity but serialize only the saved label, so duplicate account names stay separate without leaking IDs.",
+        "Why": "The first implementation treated every transfer kind alike and merged different accounts that shared a name.",
+        "Risk": "Two same-named accounts render as separate rows with identical labels; the UI may later need a privacy-safe disambiguator."
+      }
+    },
+    {
+      "id": "N6",
+      "group": "phase-2",
+      "title": "Enforced evidence capacity under the parent-run lock",
+      "where": "app/models/transaction_analysis/evidence.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Each run stores at most 25 safe evidence snapshots.",
+        "What I did": "Rechecked capacity while holding the parent-run row lock for both new evidence and reassignment, including writes that bypass validations.",
+        "Why": "Validation-only counting had a concurrent-insert race, and the first locked fix still allowed an existing row to be moved into a full run.",
+        "Risk": "The regression suite proves the race windows deterministically rather than with timing-sensitive multi-thread tests."
+      }
+    },
+    {
+      "id": "N7",
+      "group": "phase-2",
+      "title": "Accepted Phase 2 after adversarial review",
+      "where": "test/models/transaction_analysis/calculator_test.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "An independent read-only reviewer checks each phase before acceptance.",
+        "What I did": "Ran three review passes, fixed every verified high- and medium-severity finding, and accepted the phase only after a clean PASS with 33 focused tests and 152 assertions.",
+        "Why": "The review probes found authorization, stale-input, transfer-semantics, duplicate-label, and evidence-cap edge cases that the initial suite missed.",
+        "Risk": "The full application and system suites remain deferred to Phase 5 as planned."
+      }
+    },
+    {
+      "id": "N8",
+      "group": "phase-3",
+      "title": "Kept transaction analysis outside the mutating assistant",
+      "where": "app/models/transaction_analysis/runner.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Transaction analysis uses the configured built-in provider but exposes only deterministic calculations, evidence selection, clarification, and final submission.",
+        "What I did": "Added a dedicated provider loop with four read-only functions, a six-round limit, opaque calculation and evidence tokens, server-validated citations and chart data, and provider-independent saved-run context.",
+        "Why": "The generic assistant registry includes mutation tools and cannot enforce this feature's read-only boundary.",
+        "Risk": "Live credentials and provider-specific behavior still need the synthetic OpenAI, Anthropic, or Gemini smoke check in Phase 5."
+      }
+    },
+    {
+      "id": "N9",
+      "group": "phase-3",
+      "title": "Serialized provider tool calls after adversarial review",
+      "where": "app/models/transaction_analysis/runner.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "A provider may complete only with verified references, and clarification ends the current run.",
+        "What I did": "Execute only the first tool call from each provider response and return explicit deferred results for the rest. Strict server validation now rejects non-string assumptions, malformed chart titles, and extra chart keys through the single correction path.",
+        "Why": "Independent review proved that sequentially executing a parallel response allowed same-round token dependencies and post-terminal calls, while coercive validation could crash malformed submissions.",
+        "Risk": "A provider that repeatedly ignores the one-call instruction consumes extra bounded rounds, but cannot bypass round or terminal boundaries."
+      }
+    },
+    {
+      "id": "N10",
+      "group": "phase-4",
+      "title": "Built analysis as a saved workspace",
+      "where": "app/views/transaction_analyses/_workspace.html.erb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Users need visible scope controls, concise verified results, supporting transactions, follow-up questions, and version history outside the generic chat screen.",
+        "What I did": "Added an Analyze navigation surface with saved analyses, account and date controls, explicit all-history selection, prompt entry, status and clarification states, deterministic calculations, optional charts with table fallbacks, evidence links, follow-ups, reruns, rename, and delete.",
+        "Why": "The workspace keeps the selected scope and evidence visible while giving every rerun or follow-up its own saved run record.",
+        "Risk": "The system tests cover desktop and phone layout, but browser-specific visual differences still rely on the final manual smoke check."
+      }
+    },
+    {
+      "id": "N11",
+      "group": "phase-4",
+      "title": "Closed execution and live-update gaps before accepting the UI",
+      "where": "app/controllers/transaction_analyses/runs_controller.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "The complete workspace must execute runs, update without a manual reload, honor explicit scope, and disable unavailable AI actions.",
+        "What I did": "Queued initial, clarification, follow-up, and rerun work; rejected an explicitly empty account selection; replaced each run over its subscribed Turbo stream; and reused one consent-plus-provider predicate in HTTP guards, page rendering, and background rendering.",
+        "Why": "Independent review found that the first UI pass saved pending runs without dispatching them, widened an empty selection to all accounts, broadcast empty content to the wrong target, and lost availability state during background rendering.",
+        "Risk": "A provider or consent setting can change after page render, but the server rechecks availability before starting new work."
+      }
+    },
+    {
+      "id": "N12",
+      "group": "phase-5",
+      "title": "Accepted Phase 5 with live fixture-only Gemini evidence",
+      "where": "app/models/provider/openai/generic_chat_parser.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Run one live Gemini smoke with synthetic or fixture data only, record its exact evidence, and accept the branch only after an independent final review has no unresolved high- or medium-severity findings.",
+        "What I did": "Ran a transactional test against Gemini 3.8 Flash with one fixture account and two synthetic confirmed purchases in January 2040. Gemini completed calculation C1 (largest_transactions) and selected E1 {merchant: Synthetic fixture purchase A, amount: 123.45, currency: USD, date: 2040-01-10, category: Uncategorized, account_label: Checking Account} plus E2 {merchant: Synthetic fixture purchase B, amount: 67.89, currency: USD, date: 2040-01-11, category: Uncategorized, account_label: Checking Account}. The test verified the deterministic largest amount was 123.45 and rolled back all records. A live protocol probe also exposed Gemini 3's required thought signature; the final patch preserves it only across provider turns and redacts it from Langfuse telemetry.",
+        "Why": "The live check exercised the real configured provider, strict multi-round tool loop, deterministic calculator, safe evidence snapshots, and structured submission instead of relying only on mocks. It passed with 1 run and 13 assertions; 74 focused provider/runner tests with 256 assertions and targeted RuboCop also passed, and independent re-review returned PASS with no high or medium findings.",
+        "Risk": "The full Rails and system commands still contain the two unchanged fork/main failures already recorded for PostgreSQL authentication and a missing Gemini provider mock. The separate generic chat assistant does not yet retain Gemini thought signatures in persisted ToolCall records, but this transaction-analysis workspace intentionally bypasses that mutating assistant path."
+      }
+    }
+  ]
+}

@@ -1,0 +1,232 @@
+class TransactionAnalysis::Run < ApplicationRecord
+  class InaccessibleAccount < StandardError; end
+  class InvalidScope < StandardError; end
+
+  STATUSES = %w[pending running awaiting_clarification completed failed].freeze
+  REQUIRED_SCOPE_KEYS = %w[account_ids account_labels all_history start_date end_date].freeze
+  OPTIONAL_SCOPE_KEYS = %w[data_version].freeze
+  SUPPORTED_SCOPE_KEYS = (REQUIRED_SCOPE_KEYS + OPTIONAL_SCOPE_KEYS).freeze
+  STATUS_TRANSITIONS = {
+    "pending" => %w[running failed],
+    "running" => %w[awaiting_clarification completed failed],
+    "awaiting_clarification" => %w[pending failed],
+    "completed" => [],
+    "failed" => []
+  }.freeze
+
+  belongs_to :transaction_analysis, inverse_of: :runs
+  belongs_to :rerun_of, class_name: "TransactionAnalysis::Run", optional: true, inverse_of: :reruns
+
+  has_many :reruns, class_name: "TransactionAnalysis::Run", foreign_key: :rerun_of_id,
+                    dependent: nil, inverse_of: :rerun_of
+  has_many :evidences, class_name: "TransactionAnalysis::Evidence", dependent: :destroy,
+                       foreign_key: :transaction_analysis_run_id, inverse_of: :run
+
+  enum :status, STATUSES.index_with(&:itself), validate: true
+
+  before_destroy :prevent_destroy_from_completed_run, prepend: true
+
+  validates :prompt, presence: true, length: { maximum: 10_000 }
+  validate :json_attributes_have_expected_types
+  validate :scope_has_resolved_accounts_and_dates
+  validate :scope_accounts_are_accessible
+  validate :rerun_lineage_is_valid
+  validate :completion_timestamp_matches_status
+  validate :status_starts_pending, on: :create
+  validate :status_transition_is_valid, on: :update
+  validate :scope_and_prompt_are_immutable, on: :update
+  validate :completed_run_is_immutable, on: :update
+
+  def self.create_pending!(analysis:, user:, prompt:, account_ids: nil, start_date: nil, end_date: nil, all_history: false)
+    raise InvalidScope, "analysis does not belong to user" unless analysis.user_id == user.id
+
+    resolved_scope = TransactionAnalysis::Scope.resolve!(
+      user: user,
+      account_ids: account_ids,
+      start_date: start_date,
+      end_date: end_date,
+      all_history: all_history
+    )
+
+    analysis.runs.create!(
+      prompt: prompt,
+      scope: resolved_scope.snapshot
+    )
+  rescue TransactionAnalysis::Scope::InaccessibleAccount => error
+    raise InaccessibleAccount, error.message
+  rescue TransactionAnalysis::Scope::InvalidScope => error
+    raise InvalidScope, error.message
+  end
+
+  def complete!(attributes = {})
+    update!(attributes.merge(status: :completed, completed_at: Time.current))
+  end
+
+  def request_clarification!(question)
+    raise ArgumentError, "clarification question is required" if question.blank?
+
+    update!(status: :awaiting_clarification, clarification_question: question)
+  end
+
+  def clarify!(response)
+    raise ArgumentError, "clarification response is required" if response.blank?
+    raise InvalidScope, "run is not awaiting clarification" unless awaiting_clarification?
+
+    update!(status: :pending, clarification_response: response)
+  end
+
+  def create_rerun!
+    raise InvalidScope, "only completed runs can be rerun" unless completed?
+    raise InvalidScope, "scope is malformed and cannot be rerun" unless canonical_scope?
+
+    self.class.transaction do
+      self.class.create_pending!(
+        analysis: transaction_analysis,
+        user: transaction_analysis.user,
+        prompt: prompt,
+        account_ids: scope.fetch("account_ids"),
+        start_date: scope.fetch("start_date"),
+        end_date: scope.fetch("end_date"),
+        all_history: scope.fetch("all_history")
+      ).tap do |rerun|
+        rerun.update!(rerun_of: self)
+      end
+    end
+  end
+
+  private
+    def self.parse_date!(value, attribute:)
+      Date.iso8601(value.to_s)
+    rescue ArgumentError
+      raise InvalidScope, "#{attribute} must be an ISO-8601 date"
+    end
+
+    def scope_has_resolved_accounts_and_dates
+      return unless scope.is_a?(Hash)
+
+      account_ids = scope["account_ids"]
+      account_labels = scope["account_labels"]
+      all_history = scope["all_history"]
+      data_version = scope["data_version"]
+      start_date = scope["start_date"]
+      end_date = scope["end_date"]
+
+      errors.add(:scope, "must include at least one account") unless account_ids.is_a?(Array) && account_ids.any?
+      errors.add(:scope, "account IDs must be strings") unless account_ids.is_a?(Array) && account_ids.all? { |id| id.is_a?(String) && id.present? }
+      unless account_ids.is_a?(Array) && account_labels.is_a?(Array) && account_labels.length == account_ids.length && account_labels.all? { |label| label.is_a?(String) && label.present? }
+        errors.add(:scope, "must include a label for each account")
+      end
+      errors.add(:scope, "must include all_history") unless scope.key?("all_history")
+      errors.add(:scope, "all_history must be a boolean") unless all_history.in?([ true, false ])
+      if scope.key?("data_version") && !(data_version.is_a?(String) && data_version.present?)
+        errors.add(:scope, "data_version must be a nonblank string")
+      end
+      errors.add(:scope, "must include a start date") unless start_date.is_a?(String) && start_date.present?
+      errors.add(:scope, "must include an end date") unless end_date.is_a?(String) && end_date.present?
+      errors.add(:scope, "contains unsupported keys") unless supported_scope_keys?(scope)
+      return unless start_date.is_a?(String) && start_date.present? && end_date.is_a?(String) && end_date.present?
+
+      start_on = self.class.send(:parse_date!, start_date, attribute: :start_date)
+      end_on = self.class.send(:parse_date!, end_date, attribute: :end_date)
+      errors.add(:scope, "start date must be on or before end date") if start_on > end_on
+    rescue InvalidScope => error
+      errors.add(:scope, error.message)
+    end
+
+    def scope_accounts_are_accessible
+      return unless scope.is_a?(Hash) && scope["account_ids"].is_a?(Array) && scope["account_ids"].any?
+      return unless transaction_analysis&.user
+
+      account_ids = scope.fetch("account_ids").map(&:to_s).uniq
+      accessible_ids = transaction_analysis.user.accessible_accounts.visible.where(id: account_ids).pluck(:id)
+      errors.add(:scope, "contains inaccessible accounts") unless accessible_ids.length == account_ids.length
+    end
+
+    def rerun_lineage_is_valid
+      return unless rerun_of
+
+      errors.add(:rerun_of, "must belong to the same analysis") unless rerun_of.transaction_analysis_id == transaction_analysis_id
+      errors.add(:rerun_of, "must be completed") unless rerun_of.completed?
+    end
+
+    def completion_timestamp_matches_status
+      if completed?
+        errors.add(:completed_at, "must be present when completed") if completed_at.blank?
+      elsif completed_at.present?
+        errors.add(:completed_at, "is only set for completed runs")
+      end
+    end
+
+    def json_attributes_have_expected_types
+      {
+        scope: scope,
+        deterministic_output: deterministic_output,
+        chart_spec: chart_spec
+      }.each do |attribute, value|
+        errors.add(attribute, "must be an object") unless value.is_a?(Hash)
+      end
+      errors.add(:assumptions, "must be an array") unless assumptions.is_a?(Array)
+    end
+
+    def status_transition_is_valid
+      return unless will_save_change_to_status?
+
+      previous_status = status_in_database
+      return if previous_status.blank?
+
+      errors.add(:status, "cannot transition from #{previous_status} to #{status}") unless STATUS_TRANSITIONS.fetch(previous_status).include?(status)
+    end
+
+    def status_starts_pending
+      errors.add(:status, "must be pending on creation") unless pending?
+    end
+
+    def prevent_destroy_from_completed_run
+      return if destroyed_by_association.present?
+      return unless completed?
+
+      errors.add(:base, "completed runs are immutable")
+      throw :abort
+    end
+
+    def canonical_scope?
+      return false unless scope.is_a?(Hash) && supported_scope_keys?(scope)
+
+      account_ids = scope["account_ids"]
+      account_labels = scope["account_labels"]
+      start_date = scope["start_date"]
+      end_date = scope["end_date"]
+
+      account_ids.is_a?(Array) && account_ids.any? && account_ids.all? { |id| id.is_a?(String) && id.present? } &&
+        account_labels.is_a?(Array) && account_labels.length == account_ids.length && account_labels.all? { |label| label.is_a?(String) && label.present? } &&
+        scope["all_history"].in?([ true, false ]) &&
+        (!scope.key?("data_version") || (scope["data_version"].is_a?(String) && scope["data_version"].present?)) &&
+        valid_scope_dates?(start_date, end_date)
+    end
+
+    def supported_scope_keys?(scope)
+      keys = scope.keys.map(&:to_s)
+
+      (REQUIRED_SCOPE_KEYS - keys).empty? && (keys - SUPPORTED_SCOPE_KEYS).empty?
+    end
+
+    def valid_scope_dates?(start_date, end_date)
+      return false unless start_date.is_a?(String) && start_date.present? && end_date.is_a?(String) && end_date.present?
+
+      self.class.send(:parse_date!, start_date, attribute: :start_date) <= self.class.send(:parse_date!, end_date, attribute: :end_date)
+    rescue InvalidScope
+      false
+    end
+
+    def scope_and_prompt_are_immutable
+      errors.add(:scope, "is immutable after creation") if will_save_change_to_scope?
+      errors.add(:prompt, "is immutable after creation") if will_save_change_to_prompt?
+    end
+
+    def completed_run_is_immutable
+      return unless status_in_database == "completed"
+      return if changes_to_save.except("updated_at").empty?
+
+      errors.add(:base, "completed runs are immutable")
+    end
+end

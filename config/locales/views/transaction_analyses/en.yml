@@ -1,0 +1,106 @@
+---
+en:
+  transaction_analyses:
+    index:
+      title: Analyze transactions
+    workspace:
+      saved_analyses: Saved analyses
+      run_history: Analysis history
+      empty_title: Start a transaction analysis
+      empty_description: Save a workspace to ask focused questions about your transactions.
+      new_analysis_label: Analysis name
+      new_analysis_placeholder: Monthly spending review
+      create_analysis: Create analysis
+    saved_analyses:
+      saved_analyses: Saved analyses
+      new: New
+      new_analysis_label: New analysis name
+      new_analysis_placeholder: Cash flow review
+      rename_label: Analysis name
+      rename: Rename
+      delete: Delete analysis
+      delete_confirm: Delete this analysis and its pending runs?
+    analysis_form:
+      description: Choose the accounts and dates to analyze, then ask a focused question.
+      ai_not_configured: AI needs configuration
+      ai_configuration_title: Configure AI to run an analysis
+      ai_configuration_description: This workspace uses the configured analysis provider and never uses chat mutation tools.
+      configure_ai: Configure AI
+      accounts: Accounts
+      accounts_hint: All visible accounts are selected by default.
+      date_range: Date range
+      start_date: Start date
+      end_date: End date
+      all_history: Use all available history
+      prompt: What would you like to know?
+      prompt_placeholder: Which categories increased most this year?
+      run_analysis: Analyze transactions
+    run:
+      prompt: Your question
+      metadata: "%{provider} · %{model} · %{timestamp}"
+      not_available: Not available
+      clarification_title: One clarification is needed
+      clarification_response: Your answer
+      submit_clarification: Continue analysis
+      pending: Your analysis is queued. This page will show the verified result when it is ready.
+      failed: Analysis could not be completed
+      failed_without_message: The provider did not return a usable result.
+      conclusion: Conclusion
+      assumptions: Assumptions
+      no_assumptions: No additional assumptions were needed.
+      rerun: Rerun with current data
+    status:
+      pending: Queued
+      running: Analyzing
+      awaiting_clarification: Needs your answer
+      completed: Completed
+      failed: Failed
+    scope:
+      all_history: All history
+      date_range: "%{start_date} to %{end_date}"
+      unavailable: Scope unavailable
+    calculations:
+      title: Verified calculations
+      operations:
+        totals: Totals
+        category_breakdown: Category breakdown
+        merchant_breakdown: Merchant breakdown
+        account_breakdown: Account breakdown
+        monthly_trends: Monthly trends
+        equal_period_comparison: Period comparison
+        largest_transactions: Largest transactions
+      values:
+        count: Transactions
+        income: Income
+        expenses: Expenses
+        net: Net
+        average_transaction: Average transaction
+        expense_change: Expense change
+        prior_count: Prior transactions
+        recent_count: Recent transactions
+      table:
+        item: Item
+        count: Count
+        income: Income
+        expenses: Expenses
+    chart:
+      aria_label: "%{title} chart"
+      table_caption: "%{title} data table"
+      table:
+        label: Period or group
+        income: Income
+        expenses: Expenses
+    evidence:
+      title: Supporting transactions
+      view_transaction: View
+      unavailable: Source unavailable
+      unknown_merchant: Unknown merchant
+      date: Date
+      category: Category
+      account: Account
+      amount: Amount
+    follow_up_form:
+      title: Follow up on this scope
+      prompt: Follow-up question
+      placeholder: What changed compared with the prior period?
+      submit: Ask follow-up

@@ -192,6 +192,123 @@ class Provider::OpenaiTest < ActiveSupport::TestCase
     end
   end
 
+  test "preserves and re-emits a Gemini thought signature for generic tool calls" do
+    signature = "synthetic-gemini-thought-signature"
+    parsed = Provider::Openai::GenericChatParser.new(
+      {
+        "id" => "gemini-response",
+        "model" => "gemini-3",
+        "choices" => [
+          {
+            "message" => {
+              "tool_calls" => [
+                {
+                  "id" => "gemini-call-1",
+                  "function" => { "name" => "calculate", "arguments" => "{\"operation\":\"totals\"}" },
+                  "extra_content" => { "google" => { "thought_signature" => signature } }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ).parsed
+    request = parsed.function_requests.first
+
+    messages = @subject.send(
+      :build_generic_messages,
+      prompt: "Review spending",
+      function_results: [
+        {
+          call_id: request.call_id,
+          name: request.function_name,
+          arguments: request.function_args,
+          output: { "token" => "C1" },
+          thought_signature: request.thought_signature
+        }
+      ]
+    )
+
+    assert_equal signature, request.thought_signature
+    assert_equal signature, messages.last(2).first.dig(:tool_calls, 0, :extra_content, :google, :thought_signature)
+    assert_equal "gemini-call-1", messages.last.fetch(:tool_call_id)
+  end
+
+  test "sends thought signatures to the generic provider but not success telemetry" do
+    signature = "synthetic-gemini-thought-signature"
+    outbound_requests = []
+    telemetry = []
+    client = Object.new
+    client.define_singleton_method(:chat) do |parameters:|
+      outbound_requests << parameters
+      {
+        "id" => "gemini-response",
+        "model" => "gemini-3",
+        "choices" => [ { "message" => { "content" => "Done" } } ],
+        "usage" => { "total_tokens" => 1 }
+      }
+    end
+    @subject.stubs(:with_session_headers).returns(client)
+    @subject.define_singleton_method(:log_langfuse_generation) { |**options| telemetry << options }
+
+    response = generic_tool_result_response(signature)
+
+    assert_predicate response, :success?
+    assert_equal signature, outbound_requests.first.dig(:messages, -2, :tool_calls, 0, :extra_content, :google, :thought_signature)
+    refute_includes telemetry.first.fetch(:input).to_json, signature
+  end
+
+  test "sends thought signatures to the generic provider but not error telemetry" do
+    signature = "synthetic-gemini-thought-signature"
+    outbound_requests = []
+    telemetry = []
+    client = Object.new
+    client.define_singleton_method(:chat) do |parameters:|
+      outbound_requests << parameters
+      raise StandardError, "synthetic provider failure"
+    end
+    @subject.stubs(:with_session_headers).returns(client)
+    @subject.define_singleton_method(:log_langfuse_generation) { |**options| telemetry << options }
+
+    response = generic_tool_result_response(signature)
+
+    assert_not_predicate response, :success?
+    assert_equal signature, outbound_requests.first.dig(:messages, -2, :tool_calls, 0, :extra_content, :google, :thought_signature)
+    refute_includes telemetry.first.fetch(:input).to_json, signature
+  end
+
+  test "does not retain or re-emit non-string Gemini thought signatures" do
+    parsed = Provider::Openai::GenericChatParser.new(
+      {
+        "id" => "gemini-response",
+        "model" => "gemini-3",
+        "choices" => [
+          {
+            "message" => {
+              "tool_calls" => [
+                {
+                  "id" => "gemini-call-1",
+                  "function" => { "name" => "calculate", "arguments" => "{}" },
+                  "extra_content" => { "google" => { "thought_signature" => 123 } }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ).parsed
+    messages = @subject.send(
+      :build_generic_messages,
+      prompt: "Review spending",
+      function_results: [
+        { call_id: "gemini-call-1", name: "calculate", arguments: "{}", output: {}, thought_signature: 123 }
+      ]
+    )
+
+    assert_nil parsed.function_requests.first.thought_signature
+    assert_nil messages.last(2).first.dig(:tool_calls, 0, :extra_content)
+  end
+
   test "openai errors are automatically raised" do
     VCR.use_cassette("openai/chat/error") do
       response = @openai.chat_response("Test", model: "invalid-model-that-will-trigger-api-error")
@@ -729,4 +846,22 @@ class Provider::OpenaiTest < ActiveSupport::TestCase
       config.build_input(prompt: "hi", messages: [ { role: "user", content: "old" } ])
     end
   end
+
+  private
+    def generic_tool_result_response(signature)
+      @subject.send(
+        :generic_chat_response,
+        prompt: "Review spending",
+        model: "gemini-3",
+        function_results: [
+          {
+            call_id: "gemini-call-1",
+            name: "calculate",
+            arguments: "{\"operation\":\"totals\"}",
+            output: { "token" => "C1" },
+            thought_signature: signature
+          }
+        ]
+      )
+    end
 end

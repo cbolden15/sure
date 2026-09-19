@@ -588,6 +588,7 @@ class Provider::Openai < Provider
           function_results: function_results,
           messages: messages
         )
+        telemetry_input = redact_generic_telemetry_messages(messages)
 
         tools = build_generic_tools(functions)
 
@@ -608,7 +609,7 @@ class Provider::Openai < Provider
           log_langfuse_generation(
             name: "chat_response",
             model: model,
-            input: messages,
+            input: telemetry_input,
             output: parsed.messages.map(&:output_text).join("\n"),
             usage: raw_response["usage"],
             session_id: session_id,
@@ -636,7 +637,7 @@ class Provider::Openai < Provider
           log_langfuse_generation(
             name: "chat_response",
             model: model,
-            input: messages,
+            input: telemetry_input,
             error: e,
             session_id: session_id,
             user_identifier: user_identifier
@@ -675,7 +676,7 @@ class Provider::Openai < Provider
           arguments = fn_result[:arguments]
           arguments_str = arguments.is_a?(String) ? arguments : arguments.to_json
 
-          {
+          tool_call = {
             id: fn_result[:call_id],
             type: "function",
             function: {
@@ -683,6 +684,11 @@ class Provider::Openai < Provider
               arguments: arguments_str
             }
           }
+          signature = fn_result[:thought_signature]
+          if signature.is_a?(String) && signature.present?
+            tool_call[:extra_content] = { google: { thought_signature: signature } }
+          end
+          tool_call
         end
 
         payload << {
@@ -715,6 +721,18 @@ class Provider::Openai < Provider
       end
 
       payload
+    end
+
+    def redact_generic_telemetry_messages(messages)
+      messages.deep_dup.each do |message|
+        Array(message[:tool_calls] || message["tool_calls"]).each do |tool_call|
+          google_content = (tool_call[:extra_content] || tool_call["extra_content"])&.then do |extra_content|
+            extra_content[:google] || extra_content["google"]
+          end
+          google_content&.delete(:thought_signature)
+          google_content&.delete("thought_signature")
+        end
+      end
     end
 
     def build_generic_tools(functions)
