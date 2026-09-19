@@ -54,7 +54,11 @@ class TransactionAnalysis::Scope
   end
 
   def data_version
-    @data_version ||= Digest::SHA256.hexdigest(calculation_dependencies.to_json)
+    @data_version ||= live_data_version
+  end
+
+  def data_version_current?
+    @data_version.blank? || @data_version == live_data_version
   end
 
   private
@@ -127,6 +131,10 @@ class TransactionAnalysis::Scope
         transactions: transactions.map { |transaction| transaction_dependency(transaction) },
         exchange_rates: relevant_exchange_rates(entries)
       }
+    end
+
+    def live_data_version
+      Digest::SHA256.hexdigest(calculation_dependencies.to_json)
     end
 
     def transaction_dependency(transaction)

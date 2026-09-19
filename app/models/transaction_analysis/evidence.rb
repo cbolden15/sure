@@ -92,7 +92,7 @@ class TransactionAnalysis::Evidence < ApplicationRecord
     end
 
     def ensure_run_capacity!
-      return unless new_record?
+      return unless new_record? || will_save_change_to_transaction_analysis_run_id?
       return unless TransactionAnalysis::Evidence.where(transaction_analysis_run_id: transaction_analysis_run_id).count >= MAXIMUM_PER_RUN
 
       errors.add(:base, "may contain at most #{MAXIMUM_PER_RUN} citations")

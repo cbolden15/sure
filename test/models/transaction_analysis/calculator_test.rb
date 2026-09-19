@@ -77,6 +77,24 @@ class TransactionAnalysis::CalculatorTest < ActiveSupport::TestCase
     end
   end
 
+  test "reauthorizes scoped accounts immediately before calculation" do
+    calculator = TransactionAnalysis::Calculator.new(user: @user, scope: @scope)
+    @account.update!(status: :disabled)
+
+    assert_raises(TransactionAnalysis::Scope::InaccessibleAccount) { calculator.totals }
+  end
+
+  test "rejects calculations whose saved data version is stale" do
+    date = Date.new(2034, 1, 1)
+    create_transaction(account: @account, date: date, amount: 10, currency: "EUR")
+    rate = ExchangeRate.create!(from_currency: "EUR", to_currency: @user.family.currency, rate: 1.2, date: date)
+    scope = TransactionAnalysis::Scope.resolve!(user: @user, account_ids: [ @account.id ], start_date: date, end_date: date)
+    calculator = TransactionAnalysis::Calculator.new(user: @user, scope: scope)
+    rate.update!(rate: 1.3)
+
+    assert_raises(TransactionAnalysis::Scope::InvalidScope) { calculator.totals }
+  end
+
   test "totals exclude pending and transfers by default and include them only when requested" do
     create_transaction(account: @account, date: Date.new(2024, 1, 2), amount: 100)
     create_transaction(account: @account, date: Date.new(2024, 1, 3), amount: -250)

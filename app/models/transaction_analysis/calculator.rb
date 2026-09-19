@@ -151,6 +151,8 @@ class TransactionAnalysis::Calculator
 
   private
     def transaction_rows(include_pending:, include_transfers:, date_range: scope.date_range)
+      ensure_scope_is_current_and_authorized!
+
       filters = {
         account_ids: scope.account_ids,
         start_date: date_range.begin.iso8601,
@@ -186,6 +188,11 @@ class TransactionAnalysis::Calculator
       return "expense" if transaction.kind.in?(%w[loan_payment investment_contribution])
 
       entry.amount.negative? ? "income" : "expense"
+    end
+
+    def ensure_scope_is_current_and_authorized!
+      reauthorized_scope = TransactionAnalysis::Scope.from_snapshot!(user:, snapshot: scope.snapshot)
+      raise TransactionAnalysis::Scope::InvalidScope, "scope data version is stale" unless reauthorized_scope.data_version_current?
     end
 
     # Transaction::Search totals use the day's family-currency rate and fall back

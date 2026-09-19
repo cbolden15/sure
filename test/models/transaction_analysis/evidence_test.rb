@@ -77,4 +77,22 @@ class TransactionAnalysis::EvidenceTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::RecordInvalid) { candidate.save!(validate: false) }
     assert_equal TransactionAnalysis::Evidence::MAXIMUM_PER_RUN, run.evidences.reload.count
   end
+
+  test "rejects reassignment into a full run with or without validations" do
+    user = users(:family_admin)
+    analysis = user.transaction_analyses.create!(title: "Evidence reassignment")
+    source_run = TransactionAnalysis::Run.create_pending!(analysis: analysis, user: user, prompt: "Source")
+    target_run = TransactionAnalysis::Run.create_pending!(analysis: analysis, user: user, prompt: "Target")
+    evidence = source_run.evidences.create!(citation_token: "E26", snapshot: { "merchant" => "Source" })
+
+    TransactionAnalysis::Evidence::MAXIMUM_PER_RUN.times do |index|
+      target_run.evidences.create!(citation_token: "E#{index + 1}", snapshot: { "merchant" => "Target #{index}" })
+    end
+    evidence.transaction_analysis_run_id = target_run.id
+
+    assert_raises(ActiveRecord::RecordInvalid) { evidence.save! }
+    assert_raises(ActiveRecord::RecordInvalid) { evidence.save!(validate: false) }
+    assert_equal TransactionAnalysis::Evidence::MAXIMUM_PER_RUN, target_run.evidences.reload.count
+    assert_equal source_run, evidence.reload.run
+  end
 end
