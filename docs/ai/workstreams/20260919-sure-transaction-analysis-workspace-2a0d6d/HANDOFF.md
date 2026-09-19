@@ -1,13 +1,14 @@
 # Workstream handoff
 
-status: active
+packet_version: 1
+status: blocked
 workstream: 20260919-sure-transaction-analysis-workspace-2a0d6d
-milestone: Phase 4 accepted after independent review
+milestone: Phase 5 implementation and adversarial review complete; acceptance remains blocked
 branch: feat/transaction-analysis-workspace
-head: 0b2e44179e9aa905c3f2f83b6c59d6a3fbd37c9b
-last_verified.command: docker compose -f .devcontainer/docker-compose.yml run --rm --no-deps app bash -lc 'DISABLE_PARALLELIZATION=true bin/rails test test/controllers/transaction_analyses_controller_test.rb test/models/transaction_analysis/calculator_test.rb test/models/transaction_analysis/run_test.rb test/models/transaction_analysis/evidence_test.rb test/models/transaction_analysis/runner_test.rb test/jobs/transaction_analysis_job_test.rb test/system/transaction_analyses_test.rb' && targeted RuboCop and ERB lint && git diff --check
-last_verified.result: 53 tests, 227 assertions, 0 failures or errors; targeted RuboCop and ERB lint clean; independent final re-review PASS
-changes: Phase 4 responsive workspace, saved history, deterministic result presentation, evidence links, and lifecycle actions committed; adversarial review fixes queue dispatch, explicit-empty scope handling, rendered Turbo replacements, and consent-aware AI availability
-blocker: null
-next_action: resume docs/plans/2026-09-19-transaction-analysis-workspace.md from Phase 5
-safe_to_start_new_thread: false
+head: c1cf58aef0bbf415c1928176c708824878d1bf98
+last_verified.command: docker compose -f .devcontainer/docker-compose.yml run --rm --no-deps app bash -lc 'DISABLE_PARALLELIZATION=true bin/rails test test/controllers/transaction_analyses_controller_test.rb test/models/transaction_analysis test/jobs/transaction_analysis_job_test.rb test/helpers/transaction_analyses_helper_test.rb test/system/transaction_analyses_test.rb && bin/rubocop test/models/transaction_analysis/runner_test.rb'
+last_verified.result: PASS; 79 tests, 370 assertions, no failures or errors; targeted RuboCop clean; independent adversarial re-review PASS
+changes: Transaction analysis persistence, deterministic calculations, safe evidence, constrained provider runner, saved workspace UI, golden workflows, documentation, and adversarial prompt/deleted-account coverage are committed locally
+blocker: Missing Gemini credential prevents the mandatory live fixture-only smoke; unchanged fork/main PostgreSQL-auth and Gemini-mock defects keep the literal full Rails/system gate red
+next_action: Configure GEMINI_API_KEY in the devcontainer, then run and record the live fixture-only Gemini smoke
+safe_to_start_new_thread: true
