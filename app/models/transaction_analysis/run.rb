@@ -3,6 +3,9 @@ class TransactionAnalysis::Run < ApplicationRecord
   class InvalidScope < StandardError; end
 
   STATUSES = %w[pending running awaiting_clarification completed failed].freeze
+  REQUIRED_SCOPE_KEYS = %w[account_ids account_labels all_history start_date end_date].freeze
+  OPTIONAL_SCOPE_KEYS = %w[data_version].freeze
+  SUPPORTED_SCOPE_KEYS = (REQUIRED_SCOPE_KEYS + OPTIONAL_SCOPE_KEYS).freeze
   STATUS_TRANSITIONS = {
     "pending" => %w[running failed],
     "running" => %w[awaiting_clarification completed failed],
@@ -21,12 +24,15 @@ class TransactionAnalysis::Run < ApplicationRecord
 
   enum :status, STATUSES.index_with(&:itself), validate: true
 
+  before_destroy :prevent_destroy_from_completed_run, prepend: true
+
   validates :prompt, presence: true, length: { maximum: 10_000 }
   validate :json_attributes_have_expected_types
   validate :scope_has_resolved_accounts_and_dates
   validate :scope_accounts_are_accessible
   validate :rerun_lineage_is_valid
   validate :completion_timestamp_matches_status
+  validate :status_starts_pending, on: :create
   validate :status_transition_is_valid, on: :update
   validate :scope_and_prompt_are_immutable, on: :update
   validate :completed_run_is_immutable, on: :update
@@ -35,8 +41,9 @@ class TransactionAnalysis::Run < ApplicationRecord
     raise InvalidScope, "analysis does not belong to user" unless analysis.user_id == user.id
 
     accounts = resolve_accounts!(user, account_ids)
+    all_history = ActiveModel::Type::Boolean.new.cast(all_history) || false
     end_on = parse_date!(end_date || Date.current, attribute: :end_date)
-    start_on = if ActiveModel::Type::Boolean.new.cast(all_history)
+    start_on = if all_history
       earliest_transaction_date_for(accounts) || end_on
     else
       parse_date!(start_date || (end_on - 12.months), attribute: :start_date)
@@ -49,7 +56,7 @@ class TransactionAnalysis::Run < ApplicationRecord
       scope: {
         "account_ids" => accounts.map { |account| account.id.to_s },
         "account_labels" => accounts.map { |account| account.name },
-        "all_history" => ActiveModel::Type::Boolean.new.cast(all_history),
+        "all_history" => all_history,
         "start_date" => start_on.iso8601,
         "end_date" => end_on.iso8601
       }
@@ -75,6 +82,7 @@ class TransactionAnalysis::Run < ApplicationRecord
 
   def create_rerun!
     raise InvalidScope, "only completed runs can be rerun" unless completed?
+    raise InvalidScope, "scope is malformed and cannot be rerun" unless canonical_scope?
 
     self.class.transaction do
       self.class.create_pending!(
@@ -117,13 +125,26 @@ class TransactionAnalysis::Run < ApplicationRecord
       return unless scope.is_a?(Hash)
 
       account_ids = scope["account_ids"]
+      account_labels = scope["account_labels"]
+      all_history = scope["all_history"]
+      data_version = scope["data_version"]
       start_date = scope["start_date"]
       end_date = scope["end_date"]
 
       errors.add(:scope, "must include at least one account") unless account_ids.is_a?(Array) && account_ids.any?
-      errors.add(:scope, "must include a start date") if start_date.blank?
-      errors.add(:scope, "must include an end date") if end_date.blank?
-      return if start_date.blank? || end_date.blank?
+      errors.add(:scope, "account IDs must be strings") unless account_ids.is_a?(Array) && account_ids.all? { |id| id.is_a?(String) && id.present? }
+      unless account_ids.is_a?(Array) && account_labels.is_a?(Array) && account_labels.length == account_ids.length && account_labels.all? { |label| label.is_a?(String) && label.present? }
+        errors.add(:scope, "must include a label for each account")
+      end
+      errors.add(:scope, "must include all_history") unless scope.key?("all_history")
+      errors.add(:scope, "all_history must be a boolean") unless all_history.in?([ true, false ])
+      if scope.key?("data_version") && !(data_version.is_a?(String) && data_version.present?)
+        errors.add(:scope, "data_version must be a nonblank string")
+      end
+      errors.add(:scope, "must include a start date") unless start_date.is_a?(String) && start_date.present?
+      errors.add(:scope, "must include an end date") unless end_date.is_a?(String) && end_date.present?
+      errors.add(:scope, "contains unsupported keys") unless supported_scope_keys?(scope)
+      return unless start_date.is_a?(String) && start_date.present? && end_date.is_a?(String) && end_date.present?
 
       start_on = self.class.send(:parse_date!, start_date, attribute: :start_date)
       end_on = self.class.send(:parse_date!, end_date, attribute: :end_date)
@@ -174,6 +195,47 @@ class TransactionAnalysis::Run < ApplicationRecord
       return if previous_status.blank?
 
       errors.add(:status, "cannot transition from #{previous_status} to #{status}") unless STATUS_TRANSITIONS.fetch(previous_status).include?(status)
+    end
+
+    def status_starts_pending
+      errors.add(:status, "must be pending on creation") unless pending?
+    end
+
+    def prevent_destroy_from_completed_run
+      return if destroyed_by_association.present?
+      return unless completed?
+
+      errors.add(:base, "completed runs are immutable")
+      throw :abort
+    end
+
+    def canonical_scope?
+      return false unless scope.is_a?(Hash) && supported_scope_keys?(scope)
+
+      account_ids = scope["account_ids"]
+      account_labels = scope["account_labels"]
+      start_date = scope["start_date"]
+      end_date = scope["end_date"]
+
+      account_ids.is_a?(Array) && account_ids.any? && account_ids.all? { |id| id.is_a?(String) && id.present? } &&
+        account_labels.is_a?(Array) && account_labels.length == account_ids.length && account_labels.all? { |label| label.is_a?(String) && label.present? } &&
+        scope["all_history"].in?([ true, false ]) &&
+        (!scope.key?("data_version") || (scope["data_version"].is_a?(String) && scope["data_version"].present?)) &&
+        valid_scope_dates?(start_date, end_date)
+    end
+
+    def supported_scope_keys?(scope)
+      keys = scope.keys.map(&:to_s)
+
+      (REQUIRED_SCOPE_KEYS - keys).empty? && (keys - SUPPORTED_SCOPE_KEYS).empty?
+    end
+
+    def valid_scope_dates?(start_date, end_date)
+      return false unless start_date.is_a?(String) && start_date.present? && end_date.is_a?(String) && end_date.present?
+
+      self.class.send(:parse_date!, start_date, attribute: :start_date) <= self.class.send(:parse_date!, end_date, attribute: :end_date)
+    rescue InvalidScope
+      false
     end
 
     def scope_and_prompt_are_immutable

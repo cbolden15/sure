@@ -1,7 +1,7 @@
 {
   "id": "2026-09-19-transaction-analysis-workspace-notes",
   "title": "Implementation notes — Transaction analysis workspace",
-  "subtitle": "phase 1 complete · 2026-09-19 12:50 CDT",
+  "subtitle": "phase 1 accepted · 2026-09-19 13:20 CDT",
   "introTitle": "How to use",
   "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
   "actions": [
@@ -48,6 +48,32 @@
         "What I did": "Created one local setup commit containing the approved plan, governed workstream state, and empty implementation-notes artifact before starting the driver.",
         "Why": "The driver refuses a dirty tree, while the notes protocol requires the decision artifact to exist before implementation starts. No application code is included in this setup commit.",
         "Risk": "The branch has one metadata-only commit before the phase commits."
+      }
+    },
+    {
+      "id": "N2",
+      "group": "phase-1",
+      "title": "Ran Rails verification in the devcontainer",
+      "where": ".devcontainer/docker-compose.yml",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Run the repository's focused tests and Ruby style checks before accepting the phase.",
+        "What I did": "Ran migrations, focused Rails tests, and RuboCop inside the repository devcontainer.",
+        "Why": "The host shell has macOS Ruby 2.6 and does not have the repository's required Bundler 2.6.7. The devcontainer provides the supported application toolchain.",
+        "Risk": "Local verification depends on Docker being available; the same checks should also run in CI."
+      }
+    },
+    {
+      "id": "N3",
+      "group": "phase-1",
+      "title": "Hardened lifecycle boundaries after independent review",
+      "where": "app/models/transaction_analysis/run.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Completed runs are immutable and every valid run has a rerunnable saved scope.",
+        "What I did": "Blocked direct destruction of completed runs, required pending status on creation, validated the canonical scope shape, converted malformed legacy reruns into a domain error, and allowed the planned optional data_version field.",
+        "Why": "A read-only review reproduced three lifecycle holes and then caught an exact-key validation rule that would have blocked Phase 2. The corrected patch passed the final review gate.",
+        "Risk": "ActiveRecord delete and raw SQL bypass model callbacks; preventing those internal code paths would require a database trigger."
       }
     }
   ]

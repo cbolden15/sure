@@ -90,6 +90,73 @@ class TransactionAnalysis::RunTest < ActiveSupport::TestCase
     assert_equal run.prompt, rerun.prompt
   end
 
+  test "rejects direct destruction of a completed run without deleting its evidence" do
+    run = TransactionAnalysis::Run.find_by!(status: :completed)
+    evidence = run.evidences.find_by!(citation_token: "E1")
+
+    assert_not run.destroy
+    assert TransactionAnalysis::Run.exists?(run.id)
+    assert TransactionAnalysis::Evidence.exists?(evidence.id)
+  end
+
+  test "requires newly created runs to start pending" do
+    completed_scope = TransactionAnalysis::Run.find_by!(status: :completed).scope
+
+    %w[running awaiting_clarification failed completed].each do |status|
+      run = @analysis.runs.build(
+        prompt: "Review spending",
+        scope: completed_scope,
+        status: status,
+        completed_at: status == "completed" ? Time.current : nil
+      )
+
+      assert_not run.valid?, "#{status} should not be a valid initial status"
+      assert_includes run.errors[:status], "must be pending on creation"
+    end
+  end
+
+  test "requires the canonical scope keys and types" do
+    completed_scope = TransactionAnalysis::Run.find_by!(status: :completed).scope
+    missing_all_history = completed_scope.except("all_history")
+    invalid_all_history = completed_scope.merge("all_history" => "false")
+    invalid_data_version = completed_scope.merge("data_version" => "")
+    unsupported_scope = completed_scope.merge("unrelated" => "value")
+
+    missing_all_history_run = @analysis.runs.build(prompt: "Review spending", scope: missing_all_history)
+    invalid_all_history_run = @analysis.runs.build(prompt: "Review spending", scope: invalid_all_history)
+    invalid_data_version_run = @analysis.runs.build(prompt: "Review spending", scope: invalid_data_version)
+    unsupported_scope_run = @analysis.runs.build(prompt: "Review spending", scope: unsupported_scope)
+
+    assert_not missing_all_history_run.valid?
+    assert_includes missing_all_history_run.errors[:scope], "must include all_history"
+    assert_not invalid_all_history_run.valid?
+    assert_includes invalid_all_history_run.errors[:scope], "all_history must be a boolean"
+    assert_not invalid_data_version_run.valid?
+    assert_includes invalid_data_version_run.errors[:scope], "data_version must be a nonblank string"
+    assert_not unsupported_scope_run.valid?
+    assert_includes unsupported_scope_run.errors[:scope], "contains unsupported keys"
+  end
+
+  test "accepts a nonblank data version in a completed scope and reruns it" do
+    run = TransactionAnalysis::Run.create_pending!(analysis: @analysis, user: @user, prompt: "Review spending")
+    run.update!(status: :running)
+    run.complete!
+    run.update_column(:scope, run.scope.merge("data_version" => "scope-v1"))
+    run.reload
+
+    assert_predicate run, :valid?
+    assert_predicate run.create_rerun!, :pending?
+  end
+
+  test "raises a domain error when rerunning a legacy malformed scope" do
+    run = TransactionAnalysis::Run.find_by!(status: :completed)
+    run.update_column(:scope, run.scope.except("all_history"))
+
+    error = assert_raises(TransactionAnalysis::Run::InvalidScope) { run.reload.create_rerun! }
+
+    assert_equal "scope is malformed and cannot be rerun", error.message
+  end
+
   test "rejects rerun lineage from another analysis" do
     run = TransactionAnalysis::Run.create_pending!(analysis: @analysis, user: @user, prompt: "Review spending")
     run.update!(status: :running)
