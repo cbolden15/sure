@@ -105,8 +105,8 @@ module TransactionAnalysesHelper
   def transaction_analysis_markdown(markdown)
     sanitize(
       self.markdown(markdown),
-      tags: %w[p br h2 h3 ul ol li strong em code pre blockquote a table thead tbody tr th td],
-      attributes: %w[href target rel]
+      tags: %w[p br h2 h3 ul ol li strong em code pre blockquote table thead tbody tr th td],
+      attributes: []
     )
   end
 end

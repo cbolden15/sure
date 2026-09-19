@@ -11,9 +11,9 @@ Sure includes an AI assistant that can help users understand their financial dat
 
 > 👉 Help us by taking a structured approach to your issue reporting. 🙏
 
-## Architecture: Two AI Pipelines
+## Architecture: Three AI Pipelines
 
-Sure has **two separate AI systems**. The built-in workflows share one selected LLM provider, while an external assistant replaces chat only.
+Sure has three separate AI systems. The built-in workflows share one selected LLM provider, while an external assistant replaces chat only.
 
 ### 1. Chat Assistant (conversational)
 
@@ -26,14 +26,36 @@ The interactive chat where users ask questions about their finances. It routes t
 
 Background jobs that classify transactions and detect merchants use the same selected built-in provider. They rely on structured function calling with JSON schemas, not conversational chat.
 
+### 3. Transaction analysis workspace (saved, read-only)
+
+Analyze is a dedicated saved workspace for reviewing a selected set of transactions. It never uses the generic chat assistant or its function registry. Sure filters data, converts currencies, groups rows, calculates comparisons, and saves safe evidence before the model interprets the results.
+
+Each run can call only four analysis functions: a deterministic calculation, evidence selection, one focused clarification request, and final submission. It cannot create or update transactions, categories, budgets, accounts, or any other record. The server rejects unknown tools, model-invented calculation or evidence references, raw HTML in conclusions, and chart specifications that are not derived from a verified calculation.
+
+The analysis workspace uses the selected built-in OpenAI, Anthropic, or Google Gemini provider. It does not use an external chat agent, even when `ASSISTANT_TYPE=external` is set. Users must have AI enabled and a built-in provider must be configured before they can start a run.
+
+#### Data sent to a provider
+
+The initial request includes the user's question, the selected date range, the explicit all-history flag when chosen, and user-friendly account labels. During the bounded tool loop, the provider can receive only server-generated calculation results and evidence snapshots. Evidence snapshots contain merchant, amount, currency, date, category, and account label.
+
+Sure does not send account numbers, internal database IDs, external IDs, transaction notes, or transaction links. Merchant names, category names, account labels, prior conclusions, and tool results are treated as untrusted data, not instructions. Calculations and evidence are referenced by opaque `C…` and `E…` tokens.
+
+#### Scope, retention, and run states
+
+A new analysis defaults to all accessible visible accounts and the trailing 12 months. All history is an explicit form choice; at run creation it resolves to the earliest accessible transaction date. Confirmed income and expenses are included by default. Pending transactions and transfers are excluded unless the request explicitly asks for them.
+
+An analysis is a user-owned saved thread. Each initial prompt, follow-up, and rerun has its own immutable completed run with its resolved scope, calculation output, evidence snapshots, narrative, assumptions, optional server-generated chart specification, provider/model, and completion time. A clarification response resumes its saved run before it becomes completed. Evidence is capped at 25 transactions per run and retains its safe snapshot if the source transaction is later changed or deleted.
+
+Runs move through `pending`, `running`, `awaiting_clarification`, `completed`, or `failed`. A provider timeout may retry up to the configured job retry limit. Provider failures, malformed submissions, stale scopes, or tool-loop exhaustion fail the run with a safe user-facing message and record operational details in the super-admin debug log under `transaction_analysis_error`. A completed run is never modified; users can submit a scoped follow-up or create a rerun instead.
+
 ### What this means in practice
 
-| Setting | Chat assistant | Auto-categorization |
+| Setting | Chat assistant | Auto-categorization | Transaction analysis |
 |---------|---------------|---------------------|
-| `ASSISTANT_TYPE=builtin` (default) | Uses selected LLM provider | Uses selected LLM provider |
-| `ASSISTANT_TYPE=external` | Uses external agent | Uses selected LLM provider |
+| `ASSISTANT_TYPE=builtin` (default) | Uses selected LLM provider | Uses selected LLM provider | Uses selected built-in provider |
+| `ASSISTANT_TYPE=external` | Uses external agent | Uses selected LLM provider | Uses selected built-in provider |
 
-If you use an external agent for chat, configure at least one built-in provider for auto-categorization and merchant detection. Set `LLM_PROVIDER` to `openai`, `anthropic`, or `gemini`; if the selected provider has no credentials, Sure falls back to another configured provider.
+If you use an external agent for chat, configure at least one built-in provider for auto-categorization, merchant detection, and transaction analysis. Set `LLM_PROVIDER` to `openai`, `anthropic`, or `gemini`; if the selected provider has no credentials, Sure falls back to another configured provider.
 
 ## Quickstart: OpenAI Token
 
@@ -381,7 +403,7 @@ This is useful when:
 > **Set `ASSISTANT_TYPE=external` to route all users to the external agent.** Without it, routing falls back to each family's `assistant_type` DB column (configurable per-family in the Settings UI), then defaults to `"builtin"`. If you want a global override that applies to every family regardless of their UI setting, set the env var. If you only want specific families to use the external agent, skip the env var and configure it per-family in Settings.
 
 > [!NOTE]
-> The external assistant handles **chat only**. Auto-categorization and merchant detection still use the selected built-in OpenAI, Anthropic, or Gemini provider. See [Architecture: Two AI Pipelines](#architecture-two-ai-pipelines) for details.
+> The external assistant handles **chat only**. Auto-categorization, merchant detection, and transaction analysis still use the selected built-in OpenAI, Anthropic, or Gemini provider. See [Architecture: Three AI Pipelines](#architecture-three-ai-pipelines) for details.
 
 ### How It Works
 

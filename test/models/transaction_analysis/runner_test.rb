@@ -139,6 +139,22 @@ class TransactionAnalysis::RunnerTest < ActiveSupport::TestCase
     assert_predicate run.reload, :awaiting_clarification?
   end
 
+  test "returns an error for an attempted write without changing a transaction" do
+    transaction = create_transaction(account: @account, date: Date.current, amount: 42).entryable
+    run = pending_run("Rename that transaction")
+    run.update!(status: :running)
+    provider = fake_provider(
+      tool_call("update_transaction", transaction_id: transaction.id, category_id: categories(:one).id),
+      tool_call("request_clarification", question: "Which spending period should I review instead?")
+    )
+
+    TransactionAnalysis::Runner.new(run: run, provider: provider).call
+
+    assert_equal "unknown_tool", provider.calls.second.fetch(:function_results).first.dig(:output, "error")
+    assert_nil transaction.reload.category
+    assert_predicate run.reload, :awaiting_clarification?
+  end
+
   test "passes prior completed runs and clarification responses as provider-independent context" do
     completed = pending_run("What changed last month?")
     completed.update!(status: :running)
