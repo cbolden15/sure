@@ -1,7 +1,7 @@
 {
   "id": "2026-09-19-transaction-analysis-workspace-notes",
   "title": "Implementation notes — Transaction analysis workspace",
-  "subtitle": "phase 2 accepted · 2026-09-19 13:54 CDT",
+  "subtitle": "phase 3 accepted · 2026-09-19 14:25 CDT",
   "introTitle": "How to use",
   "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
   "actions": [
@@ -126,6 +126,32 @@
         "What I did": "Ran three review passes, fixed every verified high- and medium-severity finding, and accepted the phase only after a clean PASS with 33 focused tests and 152 assertions.",
         "Why": "The review probes found authorization, stale-input, transfer-semantics, duplicate-label, and evidence-cap edge cases that the initial suite missed.",
         "Risk": "The full application and system suites remain deferred to Phase 5 as planned."
+      }
+    },
+    {
+      "id": "N8",
+      "group": "phase-3",
+      "title": "Kept transaction analysis outside the mutating assistant",
+      "where": "app/models/transaction_analysis/runner.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Transaction analysis uses the configured built-in provider but exposes only deterministic calculations, evidence selection, clarification, and final submission.",
+        "What I did": "Added a dedicated provider loop with four read-only functions, a six-round limit, opaque calculation and evidence tokens, server-validated citations and chart data, and provider-independent saved-run context.",
+        "Why": "The generic assistant registry includes mutation tools and cannot enforce this feature's read-only boundary.",
+        "Risk": "Live credentials and provider-specific behavior still need the synthetic OpenAI, Anthropic, or Gemini smoke check in Phase 5."
+      }
+    },
+    {
+      "id": "N9",
+      "group": "phase-3",
+      "title": "Serialized provider tool calls after adversarial review",
+      "where": "app/models/transaction_analysis/runner.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "A provider may complete only with verified references, and clarification ends the current run.",
+        "What I did": "Execute only the first tool call from each provider response and return explicit deferred results for the rest. Strict server validation now rejects non-string assumptions, malformed chart titles, and extra chart keys through the single correction path.",
+        "Why": "Independent review proved that sequentially executing a parallel response allowed same-round token dependencies and post-terminal calls, while coercive validation could crash malformed submissions.",
+        "Risk": "A provider that repeatedly ignores the one-call instruction consumes extra bounded rounds, but cannot bypass round or terminal boundaries."
       }
     }
   ]
