@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_26_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_18_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -896,6 +896,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_26_090000) do
     t.check_constraint "state::text = ANY (ARRAY['active'::character varying::text, 'paused'::character varying::text, 'completed'::character varying::text, 'archived'::character varying::text])", name: "chk_savings_goals_state_enum"
     t.check_constraint "target_amount > 0::numeric", name: "chk_savings_goals_target_amount_positive"
     t.check_constraint "target_mode::text = ANY (ARRAY['fixed'::character varying::text, 'months_of_expenses'::character varying::text])", name: "chk_goals_target_mode_enum"
+  end
+
+  create_table "hermes_archive_accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "account_type", null: false
+    t.decimal "available_balance", precision: 19, scale: 4
+    t.datetime "created_at", null: false
+    t.string "currency", null: false
+    t.decimal "current_balance", precision: 19, scale: 4, default: "0.0", null: false
+    t.jsonb "extra", default: {}, null: false
+    t.uuid "family_id", null: false
+    t.string "institution_color"
+    t.string "institution_name"
+    t.string "institution_url"
+    t.datetime "last_synced_at"
+    t.string "name", null: false
+    t.string "source", null: false
+    t.string "source_id", null: false
+    t.string "subtype"
+    t.datetime "updated_at", null: false
+    t.index ["family_id", "source", "source_id"], name: "index_hermes_archive_accounts_on_family_source_id", unique: true
+    t.index ["family_id"], name: "index_hermes_archive_accounts_on_family_id"
   end
 
   create_table "holdings", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -2481,6 +2502,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_26_090000) do
   add_foreign_key "goal_pledges", "goals", on_delete: :cascade
   add_foreign_key "goal_pledges", "transactions", column: "matched_transaction_id", on_delete: :nullify
   add_foreign_key "goals", "families", on_delete: :cascade
+  add_foreign_key "hermes_archive_accounts", "families"
   add_foreign_key "holdings", "account_providers"
   add_foreign_key "holdings", "accounts", on_delete: :cascade
   add_foreign_key "holdings", "securities"

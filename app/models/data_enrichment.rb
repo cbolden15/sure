@@ -18,6 +18,7 @@ class DataEnrichment < ApplicationRecord
     sophtron: "sophtron",
     ibkr: "ibkr",
     questrade: "questrade",
-    redbark: "redbark"
+    redbark: "redbark",
+    hermes_archive: "hermes_archive"
   }
 end
