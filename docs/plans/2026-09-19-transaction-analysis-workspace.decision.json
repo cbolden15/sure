@@ -1,7 +1,7 @@
 {
   "id": "2026-09-19-transaction-analysis-workspace-notes",
   "title": "Implementation notes — Transaction analysis workspace",
-  "subtitle": "starting · 2026-09-19 12:33",
+  "subtitle": "phase 1 complete · 2026-09-19 12:50 CDT",
   "introTitle": "How to use",
   "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
   "actions": [

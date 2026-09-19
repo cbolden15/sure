@@ -315,6 +315,15 @@ Rails.application.routes.draw do
     end
   end
 
+  resources :transaction_analyses, only: %i[index show create update destroy] do
+    resources :runs, controller: "transaction_analyses/runs", only: :create do
+      member do
+        post :clarify
+        post :rerun
+      end
+    end
+  end
+
   resources :family_exports, only: %i[new create index destroy] do
     member do
       get :download

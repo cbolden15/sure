@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_18_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_19_004000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -2549,6 +2549,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_18_000000) do
     t.index ["status"], name: "index_trading212_items_on_status"
   end
 
+  create_table "transaction_analyses", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "title", default: "New analysis", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["user_id", "updated_at"], name: "index_transaction_analyses_on_user_id_and_updated_at"
+  end
+
+  create_table "transaction_analysis_evidences", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "citation_token", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "snapshot", default: {}, null: false
+    t.uuid "transaction_analysis_run_id", null: false
+    t.uuid "transaction_id"
+    t.datetime "updated_at", null: false
+    t.index ["transaction_analysis_run_id", "citation_token"], name: "index_transaction_analysis_evidences_on_run_and_token", unique: true
+    t.index ["transaction_id"], name: "index_transaction_analysis_evidences_on_transaction_id"
+  end
+
+  create_table "transaction_analysis_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.jsonb "assumptions", default: [], null: false
+    t.jsonb "chart_spec", default: {}, null: false
+    t.text "clarification_question"
+    t.text "clarification_response"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.jsonb "deterministic_output", default: {}, null: false
+    t.text "error_message"
+    t.integer "lock_version", default: 0, null: false
+    t.string "model"
+    t.text "prompt", null: false
+    t.string "provider_id"
+    t.uuid "rerun_of_id"
+    t.text "result_markdown"
+    t.jsonb "scope", default: {}, null: false
+    t.string "status", default: "pending", null: false
+    t.uuid "transaction_analysis_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["rerun_of_id"], name: "index_transaction_analysis_runs_on_rerun_of_id"
+    t.index ["status", "created_at"], name: "index_transaction_analysis_runs_on_status_and_created_at"
+    t.index ["transaction_analysis_id", "created_at"], name: "idx_on_transaction_analysis_id_created_at_3cbda3ab0a"
+    t.index ["transaction_analysis_id", "status"], name: "idx_on_transaction_analysis_id_status_c8013dd05c"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying::text, 'running'::character varying::text, 'awaiting_clarification'::character varying::text, 'completed'::character varying::text, 'failed'::character varying::text])", name: "chk_transaction_analysis_runs_status"
+  end
+
   create_table "transactions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "category_id"
     t.datetime "created_at", null: false
@@ -2894,6 +2939,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_18_000000) do
   add_foreign_key "trades", "securities"
   add_foreign_key "trading212_accounts", "trading212_items"
   add_foreign_key "trading212_items", "families"
+  add_foreign_key "transaction_analyses", "users", on_delete: :cascade
+  add_foreign_key "transaction_analysis_evidences", "transaction_analysis_runs", on_delete: :cascade
+  add_foreign_key "transaction_analysis_evidences", "transactions", on_delete: :nullify
+  add_foreign_key "transaction_analysis_runs", "transaction_analyses", on_delete: :cascade
+  add_foreign_key "transaction_analysis_runs", "transaction_analysis_runs", column: "rerun_of_id", on_delete: :nullify
   add_foreign_key "transactions", "categories", on_delete: :nullify
   add_foreign_key "transactions", "merchants"
   add_foreign_key "transactions", "transfers"
