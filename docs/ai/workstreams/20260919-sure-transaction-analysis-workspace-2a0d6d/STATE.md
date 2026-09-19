@@ -8,7 +8,7 @@
 - Objective: Implement the transaction analysis workspace with deterministic calculations, constrained AI, saved versions, evidence, and UI
 - Created date: 2026-09-19
 - Status: active
-- Current milestone: Phase 3 accepted after independent review
-- Accepted head: 17280174232a6b7add2f3996fb247f6634577217
-- Last verification: 55 focused tests, 223 assertions, 0 failures or errors; targeted RuboCop and diff check clean; independent re-review PASS
-- Next action: Resume the governed plan at Phase 4
+- Current milestone: Phase 4 accepted after independent review
+- Accepted head: 0b2e44179e9aa905c3f2f83b6c59d6a3fbd37c9b
+- Last verification: 53 focused tests, 227 assertions, 0 failures or errors; targeted RuboCop, ERB lint, and diff check clean; independent final re-review PASS
+- Next action: Resume the governed plan at Phase 5

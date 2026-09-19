@@ -1,7 +1,7 @@
 {
   "id": "2026-09-19-transaction-analysis-workspace-notes",
   "title": "Implementation notes — Transaction analysis workspace",
-  "subtitle": "phase 3 accepted · 2026-09-19 14:25 CDT",
+  "subtitle": "phase 4 accepted · 2026-09-19 15:41 CDT",
   "introTitle": "How to use",
   "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
   "actions": [
@@ -152,6 +152,32 @@
         "What I did": "Execute only the first tool call from each provider response and return explicit deferred results for the rest. Strict server validation now rejects non-string assumptions, malformed chart titles, and extra chart keys through the single correction path.",
         "Why": "Independent review proved that sequentially executing a parallel response allowed same-round token dependencies and post-terminal calls, while coercive validation could crash malformed submissions.",
         "Risk": "A provider that repeatedly ignores the one-call instruction consumes extra bounded rounds, but cannot bypass round or terminal boundaries."
+      }
+    },
+    {
+      "id": "N10",
+      "group": "phase-4",
+      "title": "Built analysis as a saved workspace",
+      "where": "app/views/transaction_analyses/_workspace.html.erb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Users need visible scope controls, concise verified results, supporting transactions, follow-up questions, and version history outside the generic chat screen.",
+        "What I did": "Added an Analyze navigation surface with saved analyses, account and date controls, explicit all-history selection, prompt entry, status and clarification states, deterministic calculations, optional charts with table fallbacks, evidence links, follow-ups, reruns, rename, and delete.",
+        "Why": "The workspace keeps the selected scope and evidence visible while giving every rerun or follow-up its own saved run record.",
+        "Risk": "The system tests cover desktop and phone layout, but browser-specific visual differences still rely on the final manual smoke check."
+      }
+    },
+    {
+      "id": "N11",
+      "group": "phase-4",
+      "title": "Closed execution and live-update gaps before accepting the UI",
+      "where": "app/controllers/transaction_analyses/runs_controller.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "The complete workspace must execute runs, update without a manual reload, honor explicit scope, and disable unavailable AI actions.",
+        "What I did": "Queued initial, clarification, follow-up, and rerun work; rejected an explicitly empty account selection; replaced each run over its subscribed Turbo stream; and reused one consent-plus-provider predicate in HTTP guards, page rendering, and background rendering.",
+        "Why": "Independent review found that the first UI pass saved pending runs without dispatching them, widened an empty selection to all accounts, broadcast empty content to the wrong target, and lost availability state during background rendering.",
+        "Risk": "A provider or consent setting can change after page render, but the server rechecks availability before starting new work."
       }
     }
   ]
