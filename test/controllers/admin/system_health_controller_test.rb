@@ -6,6 +6,7 @@ class Admin::SystemHealthControllerTest < ActionDispatch::IntegrationTest
     OPENAI_SUPPORTS_PDF_PROCESSING OPENAI_SUPPORTS_RESPONSES_ENDPOINT
     ANTHROPIC_ACCESS_TOKEN ANTHROPIC_API_KEY
     ANTHROPIC_BASE_URL ANTHROPIC_MODEL ANTHROPIC_REQUEST_TIMEOUT
+    GEMINI_API_KEY GEMINI_MODEL GEMINI_REQUEST_TIMEOUT
     VECTOR_STORE_PROVIDER EMBEDDING_URI_BASE EMBEDDING_MODEL
     EMBEDDING_DIMENSIONS EMBEDDING_ACCESS_TOKEN QDRANT_URL QDRANT_API_KEY
     AI_HEALTH_PROBE_TIMEOUT AI_HEALTH_PROBE_CACHE_TTL
@@ -19,6 +20,8 @@ class Admin::SystemHealthControllerTest < ActionDispatch::IntegrationTest
     Setting.stubs(:anthropic_access_token).returns(nil)
     Setting.stubs(:anthropic_base_url).returns(nil)
     Setting.stubs(:anthropic_model).returns(nil)
+    Setting.stubs(:gemini_api_key).returns(nil)
+    Setting.stubs(:gemini_model).returns(nil)
     AiHealth::Probe.any_instance.stubs(:llm).returns(probe_result(:passing))
     AiHealth::Probe.any_instance.stubs(:function_calling).returns(probe_result(:passing))
     AiHealth::Probe.any_instance.stubs(:pdf_text_extraction).returns(probe_result(:passing))
@@ -490,6 +493,27 @@ class Admin::SystemHealthControllerTest < ActionDispatch::IntegrationTest
     assert_match(/AI_HEALTH_PROBE_TIMEOUT/, response.body)
     assert_match(/OPENAI_REQUEST_TIMEOUT/, response.body)
     assert_no_match(/anthropic-secret/, response.body)
+  end
+
+  test "AI status reports Google Gemini without exposing its key" do
+    sign_in users(:sure_support_staff)
+    stub_healthy_sidekiq
+    Setting.stubs(:llm_provider).returns("gemini")
+
+    with_ai_environment(
+      "GEMINI_API_KEY" => "gemini-secret",
+      "GEMINI_MODEL" => "gemini-3.8-flash",
+      "VECTOR_STORE_PROVIDER" => "qdrant"
+    ) do
+      get admin_system_health_url(tab: "ai")
+    end
+
+    assert_response :success
+    assert_select "[data-testid='selected-llm-provider']", text: "Google Gemini"
+    assert_select "[data-testid='effective-llm-provider']", text: "Google Gemini"
+    assert_match(/gemini-3\.8-flash/, response.body)
+    assert_match(%r{https://generativelanguage\.googleapis\.com/v1beta/openai/}, response.body)
+    assert_no_match(/gemini-secret/, response.body)
   end
 
   test "AI status explains when no vector store is configured" do

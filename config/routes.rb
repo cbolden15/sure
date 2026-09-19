@@ -769,6 +769,7 @@ Rails.application.routes.draw do
         get :latest, on: :collection
       end
       resources :provider_connections, only: [ :index ]
+      resources :hermes_archive_accounts, only: [ :create ]
 
       resources :chats, only: [ :index, :show, :create, :update, :destroy ] do
         resources :messages, only: [ :create ] do

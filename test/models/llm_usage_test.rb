@@ -12,6 +12,22 @@ class LlmUsageTest < ActiveSupport::TestCase
     assert_equal "openai", LlmUsage.infer_provider("gpt-5")
   end
 
+  test "infer_provider returns google for Gemini models" do
+    assert_equal "google", LlmUsage.infer_provider("gemini-3.8-flash")
+    assert_equal "google", LlmUsage.infer_provider("gemini-4-preview")
+    assert_equal "google", LlmUsage.infer_provider("google/gemini-2.5-pro")
+  end
+
+  test "calculate_cost uses current Gemini pricing" do
+    cost = LlmUsage.calculate_cost(
+      model: "gemini-3.8-flash",
+      prompt_tokens: 1_000_000,
+      completion_tokens: 100_000
+    )
+
+    assert_equal 1.125, cost
+  end
+
   test "infer_provider attributes Bedrock and Vertex prefixed IDs to anthropic" do
     assert_equal "anthropic", LlmUsage.infer_provider("anthropic.claude-sonnet-4-5-20250929-v1:0")
     assert_equal "anthropic", LlmUsage.infer_provider("anthropic.claude-opus-4-20250514-v1:0")

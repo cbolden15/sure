@@ -189,7 +189,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.auto_categorize",
+        name: "#{provider_key}.auto_categorize",
         input: { transactions: transactions, user_categories: user_categories }
       )
 
@@ -244,7 +244,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.auto_detect_merchants",
+        name: "#{provider_key}.auto_detect_merchants",
         input: { transactions: transactions, user_merchants: user_merchants }
       )
 
@@ -274,7 +274,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.enhance_provider_merchants",
+        name: "#{provider_key}.enhance_provider_merchants",
         input: { merchants: merchants }
       )
 
@@ -316,7 +316,7 @@ class Provider::Openai < Provider
       raise Error, "Model does not support PDF/vision processing: #{effective_model}" unless supports_pdf_processing?(model: effective_model)
 
       trace = create_langfuse_trace(
-        name: "openai.process_pdf",
+        name: "#{provider_key}.process_pdf",
         input: { pdf_size: pdf_content&.bytesize }
       )
 
@@ -341,7 +341,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.extract_bank_statement",
+        name: "#{provider_key}.extract_bank_statement",
         input: { pdf_size: pdf_content&.bytesize }
       )
 
@@ -427,6 +427,10 @@ class Provider::Openai < Provider
         @session_extra_headers.transform_values { |value| value.gsub("{session_id}") { session_id } }
       )
       session_client
+    end
+
+    def provider_key
+      "openai"
     end
 
     # Returns the first positive integer among env, setting, default. Treats
@@ -754,7 +758,7 @@ class Provider::Openai < Provider
       return unless langfuse_client
 
       trace = create_langfuse_trace(
-        name: "openai.#{name}",
+        name: "#{provider_key}.#{name}",
         input: input,
         session_id: session_id,
         user_identifier: user_identifier

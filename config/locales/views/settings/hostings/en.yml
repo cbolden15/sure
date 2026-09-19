@@ -100,11 +100,12 @@ en:
         high_res_description: When enabled, logos will be retrieved at 120x120 resolution instead of 40x40. This provides sharper images on high-DPI displays.
       llm_provider_selector:
         title: AI Provider
-        description: Choose which LLM powers AI chat. Batch operations (transaction categorization, merchant detection, and PDF processing) currently always use OpenAI.
+        description: Choose which LLM powers AI chat, transaction categorization, merchant detection, and PDF processing.
         env_configured_message: Successfully configured through the LLM_PROVIDER environment variable.
         provider_label: Active LLM provider
         provider_openai: OpenAI
         provider_anthropic: Anthropic (Claude)
+        provider_gemini: Google Gemini
         provider_help: Switching providers takes effect on the next chat. Configure the active provider's credentials below.
         not_configured_hint: "Add a %{provider} API key below to activate it."
         data_retention_heading: Data handling
@@ -120,6 +121,15 @@ en:
         model_label: Default Model (Optional)
         model_placeholder: "claude-sonnet-4-6 (default)"
         model_help: Used for chat and PDF processing. Batch operations (categorize, merchant detection) default to Haiku for cost.
+      gemini_settings:
+        title: Google Gemini
+        description: Enter the Gemini API key from Google AI Studio. Sure connects directly to Google's OpenAI-compatible Gemini endpoint.
+        env_configured_message: Successfully configured through environment variables.
+        api_key_label: API Key
+        api_key_placeholder: Enter your Gemini API key
+        model_label: Model (Optional)
+        model_placeholder: "gemini-3.8-flash (default)"
+        model_help: Used for chat, transaction categorization, merchant detection, and PDF processing.
       openai_settings:
         description: Enter the access token and optionally configure a custom OpenAI-compatible provider
         env_configured_message: Successfully configured through environment variables.

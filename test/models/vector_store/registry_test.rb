@@ -92,6 +92,14 @@ class VectorStore::RegistryTest < ActiveSupport::TestCase
     end
   end
 
+  test "adapter_name routes Gemini installs to pgvector" do
+    Setting.stubs(:llm_provider).returns("gemini")
+    VectorStore::Registry.stubs(:openai_access_token).returns("sk-test")
+    ClimateControl.modify(VECTOR_STORE_PROVIDER: nil) do
+      assert_equal :pgvector, VectorStore::Registry.adapter_name
+    end
+  end
+
   test "explicit VECTOR_STORE_PROVIDER overrides anthropic default" do
     Setting.stubs(:llm_provider).returns("anthropic")
     ClimateControl.modify(VECTOR_STORE_PROVIDER: "qdrant") do
