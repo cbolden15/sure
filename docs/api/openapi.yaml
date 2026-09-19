@@ -5188,6 +5188,141 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/ErrorResponse"
+  "/api/v1/hermes_archive_accounts":
+    post:
+      summary: Imports a complete Hermes account snapshot
+      description: Upserts one personal account snapshot from Hermes using opaque
+        SHA-256 source identifiers. A complete replay updates existing rows and prunes
+        missing Hermes-owned rows while preserving user-modified entries.
+      tags:
+      - Hermes Archive
+      security:
+      - apiKeyAuth: []
+      parameters: []
+      responses:
+        '200':
+          description: snapshot imported
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - account_id
+                - provider_account_id
+                - counts
+                properties:
+                  account_id:
+                    type: string
+                    format: uuid
+                  provider_account_id:
+                    type: string
+                    format: uuid
+                  counts:
+                    type: object
+                    additionalProperties:
+                      type: integer
+        '401':
+          description: unauthorized
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+        '422':
+          description: invalid snapshot
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - account
+              properties:
+                account:
+                  type: object
+                  required:
+                  - profile
+                  - complete
+                  - source
+                  - source_id
+                  - name
+                  - currency
+                  - type
+                  - current_balance
+                  - synced_at
+                  - transactions
+                  - holdings
+                  - investment_activity
+                  properties:
+                    profile:
+                      type: string
+                      enum:
+                      - personal
+                    complete:
+                      type: boolean
+                      enum:
+                      - true
+                    source:
+                      type: string
+                      enum:
+                      - plaid
+                      - coinbase
+                    source_id:
+                      type: string
+                      pattern: "^[a-f0-9]{64}$"
+                    name:
+                      type: string
+                    institution_name:
+                      type: string
+                      nullable: true
+                    currency:
+                      type: string
+                    type:
+                      type: string
+                      enum:
+                      - depository
+                      - credit
+                      - credit_card
+                      - loan
+                      - investment
+                      - crypto
+                      - other
+                    subtype:
+                      type: string
+                      nullable: true
+                    current_balance:
+                      type: string
+                    available_balance:
+                      type: string
+                      nullable: true
+                    minimum_payment:
+                      type: string
+                      nullable: true
+                    apr:
+                      type: string
+                      nullable: true
+                    cash_balance:
+                      type: string
+                      nullable: true
+                    synced_at:
+                      type: string
+                      format: date-time
+                    transactions:
+                      type: array
+                      items:
+                        type: object
+                    holdings:
+                      type: array
+                      items:
+                        type: object
+                    investment_activity:
+                      type: array
+                      items:
+                        type: object
+        required: true
   "/api/v1/holdings":
     get:
       summary: List holdings
