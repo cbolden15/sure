@@ -8,9 +8,8 @@ class VectorStore::Registry
   class << self
     # Returns the configured adapter instance.
     # Reads from VECTOR_STORE_PROVIDER env var; without an explicit override,
-    # Anthropic installs (Setting.llm_provider == "anthropic") default to
-    # :pgvector, and anything else falls back to :openai when OpenAI
-    # credentials are present.
+    # non-OpenAI LLM installs default to :pgvector, and OpenAI installs fall
+    # back to the hosted OpenAI store when credentials are present.
     def adapter
       name = adapter_name
       return nil unless name
@@ -27,13 +26,13 @@ class VectorStore::Registry
       return explicit.to_sym if explicit && ADAPTERS.key?(explicit.to_sym)
 
       # Default routing:
-      #   - When the configured LLM provider is Anthropic (which has no hosted
-      #     vector store), fall back to the local pgvector adapter. The
+      #   - When the configured LLM provider is Anthropic or Gemini (which do
+      #     not use OpenAI's hosted vector store), fall back to pgvector. The
       #     Embeddable concern still pulls embeddings from EMBEDDING_URI_BASE /
       #     OPENAI_ACCESS_TOKEN — Anthropic users typically point this at
       #     Voyage AI, a local Ollama instance, or OpenAI embeddings.
       #   - Otherwise, use OpenAI when credentials are available.
-      return :pgvector if Setting.llm_provider == "anthropic"
+      return :pgvector if Setting.llm_provider.in?(%w[anthropic gemini])
       :openai if openai_access_token.present?
     end
 

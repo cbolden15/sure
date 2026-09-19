@@ -56,19 +56,18 @@ class Chat < ApplicationRecord
     # don't have to manually update every chat default. Falls through to a
     # provider that actually has credentials configured, otherwise the chosen
     # provider's classes would later raise "no LLM provider supports model …"
-    # even when the other provider is configured.
+    # even when another provider is configured.
     def default_model
-      prefers_anthropic = Setting.llm_provider == "anthropic"
+      classes = {
+        "openai" => Provider::Openai,
+        "anthropic" => Provider::Anthropic,
+        "gemini" => Provider::Gemini
+      }
+      selected = Provider::Registry.normalize_llm_provider(Setting.llm_provider)
+      order = [ selected, *(classes.keys - [ selected ]) ]
+      provider_class = order.filter_map { |name| classes[name] }.find(&:configured?) || classes.fetch(selected)
 
-      if prefers_anthropic && Provider::Anthropic.configured?
-        Provider::Anthropic.effective_model.presence || Setting.anthropic_model
-      elsif Provider::Openai.configured?
-        Provider::Openai.effective_model.presence || Setting.openai_model
-      elsif Provider::Anthropic.configured?
-        Provider::Anthropic.effective_model.presence || Setting.anthropic_model
-      else
-        Provider::Openai.effective_model.presence || Setting.openai_model
-      end
+      provider_class.effective_model
     end
   end
 

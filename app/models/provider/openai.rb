@@ -18,12 +18,16 @@ class Provider::Openai < Provider
     ENV["OPENAI_ACCESS_TOKEN"].present? || Setting.openai_access_token.present?
   end
 
+  def self.request_timeout
+    ENV.fetch("OPENAI_REQUEST_TIMEOUT", 60).to_i
+  end
+
   def initialize(access_token, uri_base: nil, model: nil)
     client_options = { access_token: access_token }
     llm_uri_base = uri_base.presence
     llm_model = model.presence
     client_options[:uri_base] = llm_uri_base if llm_uri_base.present?
-    client_options[:request_timeout] = ENV.fetch("OPENAI_REQUEST_TIMEOUT", 60).to_i
+    client_options[:request_timeout] = self.class.request_timeout
 
     @client = ::OpenAI::Client.new(**client_options)
     @uri_base = llm_uri_base
@@ -140,7 +144,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.auto_categorize",
+        name: "#{provider_key}.auto_categorize",
         input: { transactions: transactions, user_categories: user_categories }
       )
 
@@ -170,7 +174,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.auto_detect_merchants",
+        name: "#{provider_key}.auto_detect_merchants",
         input: { transactions: transactions, user_merchants: user_merchants }
       )
 
@@ -200,7 +204,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.enhance_provider_merchants",
+        name: "#{provider_key}.enhance_provider_merchants",
         input: { merchants: merchants }
       )
 
@@ -242,7 +246,7 @@ class Provider::Openai < Provider
       raise Error, "Model does not support PDF/vision processing: #{effective_model}" unless supports_pdf_processing?(model: effective_model)
 
       trace = create_langfuse_trace(
-        name: "openai.process_pdf",
+        name: "#{provider_key}.process_pdf",
         input: { pdf_size: pdf_content&.bytesize }
       )
 
@@ -267,7 +271,7 @@ class Provider::Openai < Provider
       effective_model = model.presence || @default_model
 
       trace = create_langfuse_trace(
-        name: "openai.extract_bank_statement",
+        name: "#{provider_key}.extract_bank_statement",
         input: { pdf_size: pdf_content&.bytesize }
       )
 
@@ -334,6 +338,10 @@ class Provider::Openai < Provider
 
   private
     attr_reader :client
+
+    def provider_key
+      "openai"
+    end
 
     # Returns the first positive integer among env, setting, default. Treats
     # zero or negative values as "unset" and falls through — a 0-token budget
@@ -656,7 +664,7 @@ class Provider::Openai < Provider
       return unless langfuse_client
 
       trace = create_langfuse_trace(
-        name: "openai.#{name}",
+        name: "#{provider_key}.#{name}",
         input: input,
         session_id: session_id,
         user_identifier: user_identifier

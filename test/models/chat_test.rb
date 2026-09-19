@@ -4,6 +4,7 @@ class ChatTest < ActiveSupport::TestCase
   setup do
     @user = users(:family_admin)
     @assistant = mock
+    Provider::Gemini.stubs(:configured?).returns(false)
   end
 
   test "user sees all messages in debug mode" do
@@ -62,7 +63,7 @@ class ChatTest < ActiveSupport::TestCase
     end
   end
 
-  # These three tests assert routing (which provider's effective_model wins),
+  # These tests assert routing (which provider's effective_model wins),
   # not the constant value itself — the assertion side reads through
   # Provider::*.effective_model so ENV overrides like ANTHROPIC_MODEL /
   # OPENAI_MODEL don't make the tests flake.
@@ -87,6 +88,24 @@ class ChatTest < ActiveSupport::TestCase
     Setting.stubs(:llm_provider).returns("openai")
 
     assert_equal Provider::Anthropic.effective_model, Chat.default_model
+  end
+
+  test "default_model returns Gemini's effective model when Gemini is selected and configured" do
+    Provider::Openai.stubs(:configured?).returns(true)
+    Provider::Anthropic.stubs(:configured?).returns(true)
+    Provider::Gemini.stubs(:configured?).returns(true)
+    Setting.stubs(:llm_provider).returns("gemini")
+
+    assert_equal Provider::Gemini.effective_model, Chat.default_model
+  end
+
+  test "default_model falls back to Gemini when the selected providers are unconfigured" do
+    Provider::Openai.stubs(:configured?).returns(false)
+    Provider::Anthropic.stubs(:configured?).returns(false)
+    Provider::Gemini.stubs(:configured?).returns(true)
+    Setting.stubs(:llm_provider).returns("openai")
+
+    assert_equal Provider::Gemini.effective_model, Chat.default_model
   end
 
   test "creates with configured model when OPENAI_MODEL env is set" do

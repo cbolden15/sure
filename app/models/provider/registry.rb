@@ -4,6 +4,7 @@ class Provider::Registry
   Error = Class.new(StandardError)
 
   CONCEPTS = %i[exchange_rates securities llm property_valuations]
+  LLM_PROVIDER_KEYS = %w[openai anthropic gemini].freeze
 
   validates :concept, inclusion: { in: CONCEPTS }
 
@@ -21,15 +22,24 @@ class Provider::Registry
     # Resolves the LLM provider for batch/PDF flows, honoring Setting.llm_provider
     # the way chat does: prefer the configured provider, but fall back to whichever
     # one actually has credentials so an install that swaps providers (or has only
-    # one configured) keeps working. Returns nil when neither is configured —
+    # one configured) keeps working. Returns nil when none are configured —
     # callers guard on that.
     def preferred_llm_provider
-      order = Setting.llm_provider == "anthropic" ? %i[anthropic openai] : %i[openai anthropic]
-      order.each do |name|
+      llm_provider_order.each do |name|
         provider = get_provider(name)
         return provider if provider
       end
       nil
+    end
+
+    def normalize_llm_provider(value)
+      provider = value.to_s
+      LLM_PROVIDER_KEYS.include?(provider) ? provider : "openai"
+    end
+
+    def llm_provider_order
+      selected = normalize_llm_provider(Setting.llm_provider).to_sym
+      [ selected, *(LLM_PROVIDER_KEYS.map(&:to_sym) - [ selected ]) ]
     end
 
     def plaid_provider_for_region(region)
@@ -103,6 +113,16 @@ class Provider::Registry
         model = ENV["ANTHROPIC_MODEL"].presence || Setting.anthropic_model
 
         Provider::Anthropic.new(access_token, base_url: base_url, model: model)
+      end
+
+      def gemini
+        api_key = ENV["GEMINI_API_KEY"].presence || Setting.gemini_api_key
+
+        return nil unless api_key.present?
+
+        model = ENV["GEMINI_MODEL"].presence || Setting.gemini_model
+
+        Provider::Gemini.new(api_key, model: model)
       end
 
       def yahoo_finance
@@ -206,11 +226,11 @@ class Provider::Registry
       when :securities
         %i[twelve_data yahoo_finance tiingo eodhd alpha_vantage mfapi binance_public moex_public tinkoff_invest]
       when :llm
-        %i[openai anthropic]
+        self.class.llm_provider_order
       when :property_valuations
         %i[rentcast realie]
       else
-        %i[plaid_us plaid_eu github openai anthropic]
+        %i[plaid_us plaid_eu github openai anthropic gemini]
       end
     end
 end

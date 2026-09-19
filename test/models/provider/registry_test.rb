@@ -6,10 +6,12 @@ class Provider::RegistryTest < ActiveSupport::TestCase
     ClimateControl.modify(
       "OPENAI_ACCESS_TOKEN" => nil,
       "ANTHROPIC_ACCESS_TOKEN" => nil,
-      "ANTHROPIC_API_KEY" => nil
+      "ANTHROPIC_API_KEY" => nil,
+      "GEMINI_API_KEY" => nil
     ) do
       Setting.stubs(:openai_access_token).returns(nil)
       Setting.stubs(:anthropic_access_token).returns(nil)
+      Setting.stubs(:gemini_api_key).returns(nil)
 
       registry = Provider::Registry.for_concept(:llm)
 
@@ -126,6 +128,34 @@ class Provider::RegistryTest < ActiveSupport::TestCase
     assert_same anthropic, Provider::Registry.preferred_llm_provider
   end
 
+  test "preferred_llm_provider returns gemini when selected" do
+    gemini = mock("gemini")
+    Provider::Registry.stubs(:openai).returns(mock("openai"))
+    Provider::Registry.stubs(:anthropic).returns(mock("anthropic"))
+    Provider::Registry.stubs(:gemini).returns(gemini)
+    Setting.stubs(:llm_provider).returns("gemini")
+
+    assert_same gemini, Provider::Registry.preferred_llm_provider
+  end
+
+  test "Gemini provider initializes from GEMINI_API_KEY" do
+    ClimateControl.modify("GEMINI_API_KEY" => "fake-gemini-key", "GEMINI_MODEL" => "gemini-3.8-flash") do
+      Setting.stubs(:gemini_api_key).returns(nil)
+      Setting.stubs(:gemini_model).returns(nil)
+
+      provider = Provider::Registry.get_provider(:gemini)
+
+      assert_instance_of Provider::Gemini, provider
+      assert provider.supports_model?("gemini-3.8-flash")
+    end
+  end
+
+  test "LLM provider order puts the selected provider first" do
+    Setting.stubs(:llm_provider).returns("gemini")
+
+    assert_equal %i[gemini openai anthropic], Provider::Registry.for_concept(:llm).provider_keys
+  end
+
   test "preferred_llm_provider falls back to the configured provider when the selected one is unconfigured" do
     openai = mock("openai")
     Provider::Registry.stubs(:openai).returns(openai)
@@ -138,6 +168,7 @@ class Provider::RegistryTest < ActiveSupport::TestCase
   test "preferred_llm_provider returns nil when no provider is configured" do
     Provider::Registry.stubs(:openai).returns(nil)
     Provider::Registry.stubs(:anthropic).returns(nil)
+    Provider::Registry.stubs(:gemini).returns(nil)
     Setting.stubs(:llm_provider).returns("openai")
 
     assert_nil Provider::Registry.preferred_llm_provider
