@@ -1,7 +1,7 @@
 {
   "id": "2026-09-19-transaction-analysis-workspace-notes",
   "title": "Implementation notes — Transaction analysis workspace",
-  "subtitle": "phase 4 accepted · 2026-09-19 15:41 CDT",
+  "subtitle": "phase 5 accepted · 2026-09-19 17:11 CDT",
   "introTitle": "How to use",
   "intro": "<p>Each item is a decision, deviation, or tradeoff made during implementation. <strong>Acknowledge</strong> if fine. <strong>Discuss</strong> to write what should change. <strong>Revert</strong> to flag for undo.</p>",
   "actions": [
@@ -178,6 +178,19 @@
         "What I did": "Queued initial, clarification, follow-up, and rerun work; rejected an explicitly empty account selection; replaced each run over its subscribed Turbo stream; and reused one consent-plus-provider predicate in HTTP guards, page rendering, and background rendering.",
         "Why": "Independent review found that the first UI pass saved pending runs without dispatching them, widened an empty selection to all accounts, broadcast empty content to the wrong target, and lost availability state during background rendering.",
         "Risk": "A provider or consent setting can change after page render, but the server rechecks availability before starting new work."
+      }
+    },
+    {
+      "id": "N12",
+      "group": "phase-5",
+      "title": "Accepted Phase 5 with live fixture-only Gemini evidence",
+      "where": "app/models/provider/openai/generic_chat_parser.rb",
+      "default": "acknowledge",
+      "body": {
+        "Spec said": "Run one live Gemini smoke with synthetic or fixture data only, record its exact evidence, and accept the branch only after an independent final review has no unresolved high- or medium-severity findings.",
+        "What I did": "Ran a transactional test against Gemini 3.8 Flash with one fixture account and two synthetic confirmed purchases in January 2040. Gemini completed calculation C1 (largest_transactions) and selected E1 {merchant: Synthetic fixture purchase A, amount: 123.45, currency: USD, date: 2040-01-10, category: Uncategorized, account_label: Checking Account} plus E2 {merchant: Synthetic fixture purchase B, amount: 67.89, currency: USD, date: 2040-01-11, category: Uncategorized, account_label: Checking Account}. The test verified the deterministic largest amount was 123.45 and rolled back all records. A live protocol probe also exposed Gemini 3's required thought signature; the final patch preserves it only across provider turns and redacts it from Langfuse telemetry.",
+        "Why": "The live check exercised the real configured provider, strict multi-round tool loop, deterministic calculator, safe evidence snapshots, and structured submission instead of relying only on mocks. It passed with 1 run and 13 assertions; 74 focused provider/runner tests with 256 assertions and targeted RuboCop also passed, and independent re-review returned PASS with no high or medium findings.",
+        "Risk": "The full Rails and system commands still contain the two unchanged fork/main failures already recorded for PostgreSQL authentication and a missing Gemini provider mock. The separate generic chat assistant does not yet retain Gemini thought signatures in persisted ToolCall records, but this transaction-analysis workspace intentionally bypasses that mutating assistant path."
       }
     }
   ]
