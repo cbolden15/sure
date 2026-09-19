@@ -49,11 +49,13 @@ class Provider::Openai::GenericChatParser
       tool_calls = message_choice&.dig("tool_calls") || []
 
       tool_calls.map do |tool_call|
+        signature = tool_call.dig("extra_content", "google", "thought_signature")
         ChatFunctionRequest.new(
           id: tool_call.dig("id"),
           call_id: tool_call.dig("id"),
           function_name: tool_call.dig("function", "name"),
-          function_args: tool_call.dig("function", "arguments")
+          function_args: tool_call.dig("function", "arguments"),
+          thought_signature: signature.is_a?(String) ? signature : nil
         )
       end
     end

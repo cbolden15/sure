@@ -242,6 +242,54 @@ class TransactionAnalysis::RunnerTest < ActiveSupport::TestCase
     assert_predicate native_provider.calls.second.fetch(:previous_response_id), :present?
   end
 
+  test "preserves opaque tool metadata through the provider-independent result handoff" do
+    run = pending_run("Review totals")
+    run.update!(status: :running)
+    signature = "synthetic-gemini-thought-signature"
+    provider = fake_provider(
+      tool_call("calculate", operation: "totals", include_pending: false, include_transfers: false, period_days: 1, limit: 1, thought_signature: signature),
+      tool_call("request_clarification", question: "Which comparison should I make?")
+    )
+
+    TransactionAnalysis::Runner.new(run: run, provider: provider).call
+
+    assert_equal signature, provider.calls.second.fetch(:function_results).first.fetch(:thought_signature)
+  end
+
+  test "preserves opaque tool metadata for deferred calls in the same response" do
+    run = pending_run("Review totals")
+    run.update!(status: :running)
+    first_signature = "synthetic-gemini-thought-signature-1"
+    second_signature = "synthetic-gemini-thought-signature-2"
+    provider = fake_provider(
+      tool_calls(
+        [ "calculate", { operation: "totals", include_pending: false, include_transfers: false, period_days: 1, limit: 1 }, first_signature ],
+        [ "select_evidence", { calculation_tokens: [ "C1" ] }, second_signature ]
+      ),
+      tool_call("request_clarification", question: "Which comparison should I make?")
+    )
+
+    TransactionAnalysis::Runner.new(run: run, provider: provider).call
+
+    assert_equal [ first_signature, second_signature ], provider.calls.second.fetch(:function_results).pluck(:thought_signature)
+  end
+
+  test "preserves opaque tool metadata for invalid tool arguments" do
+    run = pending_run("Review totals")
+    run.update!(status: :running)
+    signature = "synthetic-gemini-thought-signature"
+    provider = fake_provider(
+      tool_call("calculate", function_args: "{", thought_signature: signature),
+      tool_call("request_clarification", question: "Which comparison should I make?")
+    )
+
+    TransactionAnalysis::Runner.new(run: run, provider: provider).call
+
+    result = provider.calls.second.fetch(:function_results).first
+    assert_equal "invalid_arguments", result.dig(:output, "error")
+    assert_equal signature, result.fetch(:thought_signature)
+  end
+
   test "reruns retain prior completed run context but create a new immutable result" do
     source = pending_run("Review my expenses")
     source.update!(status: :running)
@@ -420,8 +468,8 @@ class TransactionAnalysis::RunnerTest < ActiveSupport::TestCase
       FakeProvider.new(responses: responses, preserves_context: preserves_context)
     end
 
-    def tool_call(name, **arguments)
-      tool_calls([ name, arguments ])
+    def tool_call(name, thought_signature: nil, function_args: nil, **arguments)
+      tool_calls([ name, arguments, thought_signature, function_args ])
     end
 
     def tool_calls(*requests)
@@ -429,8 +477,14 @@ class TransactionAnalysis::RunnerTest < ActiveSupport::TestCase
         id: SecureRandom.uuid,
         model: "test-model",
         messages: [],
-        function_requests: requests.map do |name, arguments|
-          Provider::LlmConcept::ChatFunctionRequest.new(id: SecureRandom.uuid, call_id: SecureRandom.uuid, function_name: name, function_args: arguments.to_json)
+        function_requests: requests.map do |name, arguments, thought_signature, function_args|
+          Provider::LlmConcept::ChatFunctionRequest.new(
+            id: SecureRandom.uuid,
+            call_id: SecureRandom.uuid,
+            function_name: name,
+            function_args: function_args || arguments.to_json,
+            thought_signature: thought_signature
+          )
         end
       )
       Provider::Response.new(success?: true, data: response, error: nil)

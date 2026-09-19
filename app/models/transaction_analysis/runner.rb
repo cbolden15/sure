@@ -92,16 +92,11 @@ class TransactionAnalysis::Runner
       else
         function.call(JSON.parse(request.function_args.presence || "{}"))
       end
-      {
-        call_id: request.call_id,
-        name: request.function_name,
-        arguments: request.function_args,
-        output:
-      }
+      function_result(request, output)
     rescue JSON::ParserError
-      { call_id: request.call_id, name: request.function_name, arguments: request.function_args, output: { "error" => "invalid_arguments", "message" => "Tool arguments must be valid JSON." } }
+      function_result(request, { "error" => "invalid_arguments", "message" => "Tool arguments must be valid JSON." })
     rescue TransactionAnalysis::Calculator::InvalidOperation, TransactionAnalysis::Scope::InvalidScope, ArgumentError => error
-      { call_id: request.call_id, name: request.function_name, arguments: request.function_args, output: { "error" => "invalid_arguments", "message" => error.message } }
+      function_result(request, { "error" => "invalid_arguments", "message" => error.message })
     end
 
     def execute_round(requests)
@@ -110,12 +105,21 @@ class TransactionAnalysis::Runner
     end
 
     def deferred_result(request)
-      {
+      function_result(request, {
+        "error" => "deferred_tool_call",
+        "message" => "Make one tool call per response; request this tool again after the prior result."
+      })
+    end
+
+    def function_result(request, output)
+      result = {
         call_id: request.call_id,
         name: request.function_name,
         arguments: request.function_args,
-        output: { "error" => "deferred_tool_call", "message" => "Make one tool call per response; request this tool again after the prior result." }
+        output: output
       }
+      result[:thought_signature] = request.thought_signature if request.thought_signature.present?
+      result
     end
 
     def submit_analysis(params)
