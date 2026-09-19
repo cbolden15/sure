@@ -1,6 +1,9 @@
 class TransactionAnalyses::RunsController < ApplicationController
+  include BillsHelper
+
   before_action :set_transaction_analysis
   before_action :set_run, only: %i[clarify rerun]
+  guard_feature unless: -> { bills_one_shot_ai_available? }
 
   rescue_from TransactionAnalysis::Run::InaccessibleAccount, TransactionAnalysis::Run::InvalidScope,
               with: :render_invalid_scope
@@ -17,6 +20,7 @@ class TransactionAnalyses::RunsController < ApplicationController
       end_date: run_params[:end_date],
       all_history: ActiveModel::Type::Boolean.new.cast(run_params[:all_history])
     )
+    TransactionAnalysisJob.perform_later(@run.id)
 
     respond_to do |format|
       format.html { redirect_to transaction_analysis_path(@transaction_analysis, anchor: "run_#{@run.to_param}"), status: :see_other }
@@ -26,6 +30,7 @@ class TransactionAnalyses::RunsController < ApplicationController
 
   def clarify
     @run.clarify!(clarify_params[:response])
+    TransactionAnalysisJob.perform_later(@run.id)
     respond_to do |format|
       format.html { redirect_to transaction_analysis_path(@transaction_analysis, anchor: "run_#{@run.to_param}"), status: :see_other }
       format.json { render json: @run }
@@ -34,6 +39,7 @@ class TransactionAnalyses::RunsController < ApplicationController
 
   def rerun
     rerun = @run.create_rerun!
+    TransactionAnalysisJob.perform_later(rerun.id)
 
     respond_to do |format|
       format.html { redirect_to transaction_analysis_path(@transaction_analysis, anchor: "run_#{rerun.to_param}"), status: :see_other }

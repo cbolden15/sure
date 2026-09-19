@@ -9,11 +9,14 @@ class TransactionAnalysesTest < ApplicationSystemTestCase
   end
 
   test "creates a pending scoped analysis from the Analyze workspace" do
+    AiHealth.any_instance.stubs(:llm_configured?).returns(true)
+    Provider::Registry.stubs(:preferred_llm_provider).returns(Object.new)
+
     visit root_path
     click_link "Analyze"
 
     assert_selector "h1", text: @analysis.title
-    assert_text "Configure AI to run an analysis"
+    assert_no_text "Configure AI to run an analysis"
     assert_selector "input[name='run[account_ids][]']", minimum: 1
     assert_selector "input[name='run[start_date]']"
     assert_selector "input[name='run[end_date]']"
@@ -30,6 +33,8 @@ class TransactionAnalysesTest < ApplicationSystemTestCase
   end
 
   test "shows verified evidence, a chart table, and versioned follow-up actions" do
+    AiHealth.any_instance.stubs(:llm_configured?).returns(true)
+    Provider::Registry.stubs(:preferred_llm_provider).returns(Object.new)
     run = completed_run_with_evidence
 
     visit transaction_analysis_path(@analysis)
@@ -57,6 +62,44 @@ class TransactionAnalysesTest < ApplicationSystemTestCase
 
     assert_selector "article[id^='transaction_analysis_run_']", minimum: 4
     assert TransactionAnalysis::Run.exists?(rerun_of: run)
+  end
+
+  test "disables every analysis execution action without an AI provider" do
+    awaiting_run = TransactionAnalysis::Run.create_pending!(analysis: @analysis, user: @user, prompt: "Clarify spending")
+    awaiting_run.update!(status: :running)
+    awaiting_run.request_clarification!("Which month should I review?")
+    completed_run = completed_run_with_evidence
+
+    visit transaction_analysis_path(@analysis)
+
+    assert_button "Analyze transactions", disabled: true
+    within "##{dom_id(awaiting_run)}" do
+      assert_button "Continue analysis", disabled: true
+    end
+    within "##{dom_id(completed_run)}" do
+      assert_button "Ask follow-up", disabled: true
+      assert_button "Rerun with current data", disabled: true
+    end
+  end
+
+  test "disables every analysis execution action without user AI consent" do
+    Provider::Registry.stubs(:preferred_llm_provider).returns(Object.new)
+    @user.update!(ai_enabled: false)
+    awaiting_run = TransactionAnalysis::Run.create_pending!(analysis: @analysis, user: @user, prompt: "Clarify spending")
+    awaiting_run.update!(status: :running)
+    awaiting_run.request_clarification!("Which month should I review?")
+    completed_run = completed_run_with_evidence
+
+    visit transaction_analysis_path(@analysis)
+
+    assert_button "Analyze transactions", disabled: true
+    within "##{dom_id(awaiting_run)}" do
+      assert_button "Continue analysis", disabled: true
+    end
+    within "##{dom_id(completed_run)}" do
+      assert_button "Ask follow-up", disabled: true
+      assert_button "Rerun with current data", disabled: true
+    end
   end
 
   test "keeps the workspace usable without horizontal scroll on a phone" do

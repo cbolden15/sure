@@ -22,7 +22,7 @@
       <%= form_with url: clarify_transaction_analysis_run_path(analysis, run), scope: :run, class: "space-y-3" do |form| %>
         <%= form.label :response, t(".clarification_response"), class: "block text-sm font-medium text-primary" %>
         <%= form.text_area :response, required: true, rows: 3, class: "w-full rounded-lg border border-primary bg-container-inset px-3 py-2 text-sm text-primary focus-ring" %>
-        <%= render DS::Button.new(text: t(".submit_clarification"), type: "submit") %>
+        <%= render DS::Button.new(text: t(".submit_clarification"), type: "submit", disabled: !ai_configured) %>
       <% end %>
     <% elsif run.pending? || run.running? %>
       <%= render DS::Alert.new(message: t(".pending"), variant: :info, live: :status) %>
@@ -58,10 +58,10 @@
       <% end %>
 
       <div class="flex flex-wrap gap-2 border-t border-divider pt-4">
-        <%= render DS::Button.new(text: t(".rerun"), href: rerun_transaction_analysis_run_path(analysis, run), variant: "outline", icon: "rotate-cw") %>
+        <%= render DS::Button.new(text: t(".rerun"), href: rerun_transaction_analysis_run_path(analysis, run), variant: "outline", icon: "rotate-cw", disabled: !ai_configured) %>
       </div>
 
-      <%= render "transaction_analyses/follow_up_form", analysis: analysis, run: run %>
+      <%= render "transaction_analyses/follow_up_form", analysis: analysis, run: run, ai_configured: ai_configured %>
     <% end %>
   <% end %>
 </article>

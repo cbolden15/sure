@@ -16,6 +16,7 @@
   <% end %>
 
   <%= form_with url: transaction_analysis_runs_path(analysis), scope: :run, id: "transaction-analysis-form", class: "space-y-5" do |form| %>
+    <%= form.hidden_field :account_ids, value: "", multiple: true %>
     <fieldset>
       <legend class="text-sm font-medium text-primary"><%= t(".accounts") %></legend>
       <p class="mt-1 text-xs text-secondary"><%= t(".accounts_hint") %></p>
@@ -50,6 +51,6 @@
       <%= form.text_area :prompt, required: true, rows: 4, maxlength: 10_000, placeholder: t(".prompt_placeholder"), class: "w-full rounded-lg border border-primary bg-container-inset px-3 py-2 text-sm text-primary focus-ring" %>
     </div>
 
-    <%= render DS::Button.new(text: t(".run_analysis"), icon: "sparkles", type: "submit") %>
+    <%= render DS::Button.new(text: t(".run_analysis"), icon: "sparkles", type: "submit", disabled: !@ai_configured) %>
   <% end %>
 <% end %>

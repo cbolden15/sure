@@ -5,9 +5,10 @@ class TransactionAnalysesControllerTest < ActionDispatch::IntegrationTest
     @user = users(:family_admin)
     @analysis = transaction_analyses(:spending_review)
     sign_in @user
+    Provider::Registry.stubs(:preferred_llm_provider).returns(Object.new)
   end
 
-  test "creates an analysis and scoped pending run without queuing an LLM request" do
+  test "creates an analysis and queues its scoped pending run" do
     assert_difference("TransactionAnalysis.count") do
       post transaction_analyses_url, params: { transaction_analysis: { title: "Cash flow review" } }, as: :json
     end
@@ -16,7 +17,7 @@ class TransactionAnalysesControllerTest < ActionDispatch::IntegrationTest
     analysis = TransactionAnalysis.order(created_at: :desc).first
 
     assert_difference("TransactionAnalysis::Run.count") do
-      assert_no_enqueued_jobs do
+      assert_enqueued_jobs 1, only: TransactionAnalysisJob do
         post transaction_analysis_runs_url(analysis), params: {
           run: { prompt: "Where did I spend more?", account_ids: [ accounts(:depository).id ], all_history: false }
         }, as: :json
@@ -27,6 +28,28 @@ class TransactionAnalysesControllerTest < ActionDispatch::IntegrationTest
     run = analysis.runs.order(created_at: :desc).first
     assert run.pending?
     assert_equal [ accounts(:depository).id ], run.scope.fetch("account_ids")
+  end
+
+  test "rejects an explicitly empty account selection" do
+    assert_no_difference("TransactionAnalysis::Run.count") do
+      post transaction_analysis_runs_url(@analysis), params: {
+        run: { prompt: "Inspect this", account_ids: [], all_history: false }
+      }, as: :json
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  test "rejects execution when the provider is configured but the user has not consented to AI" do
+    @user.update!(ai_enabled: false)
+
+    assert_no_difference("TransactionAnalysis::Run.count") do
+      post transaction_analysis_runs_url(@analysis), params: {
+        run: { prompt: "Inspect this", account_ids: [ accounts(:depository).id ], all_history: false }
+      }, as: :json
+    end
+
+    assert_response :forbidden
   end
 
   test "lists, updates, and destroys only the current user's analyses" do
@@ -103,7 +126,9 @@ class TransactionAnalysesControllerTest < ActionDispatch::IntegrationTest
     run.update!(status: :running)
     run.request_clarification!("Which account?")
 
-    post clarify_transaction_analysis_run_url(@analysis, run), params: { run: { response: "Checking" } }, as: :json
+    assert_enqueued_jobs 1, only: TransactionAnalysisJob do
+      post clarify_transaction_analysis_run_url(@analysis, run), params: { run: { response: "Checking" } }, as: :json
+    end
 
     assert_response :success
     assert_equal "Checking", run.reload.clarification_response
@@ -113,7 +138,9 @@ class TransactionAnalysesControllerTest < ActionDispatch::IntegrationTest
     run.complete!(result_markdown: "Done")
 
     assert_difference("TransactionAnalysis::Run.count") do
-      post rerun_transaction_analysis_run_url(@analysis, run), as: :json
+      assert_enqueued_jobs 1, only: TransactionAnalysisJob do
+        post rerun_transaction_analysis_run_url(@analysis, run), as: :json
+      end
     end
 
     assert_response :created

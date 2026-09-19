@@ -98,11 +98,16 @@ class TransactionAnalysis::Scope
     end
 
     def resolve_accounts!(requested_ids)
-      ids = Array(requested_ids).reject(&:blank?).map(&:to_s).uniq
       available = user.accessible_accounts.visible
-      records = ids.empty? ? available.order(:id).to_a : available.where(id: ids).order(:id).to_a
+      if requested_ids.nil?
+        records = available.order(:id).to_a
+      else
+        ids = Array(requested_ids).reject(&:blank?).map(&:to_s).uniq
+        raise InaccessibleAccount, "select at least one account" if ids.empty?
 
-      raise InaccessibleAccount, "one or more selected accounts are inaccessible" unless ids.empty? || records.length == ids.length
+        records = available.where(id: ids).order(:id).to_a
+        raise InaccessibleAccount, "one or more selected accounts are inaccessible" unless records.length == ids.length
+      end
       raise InaccessibleAccount, "no visible accounts are available" if records.empty?
 
       records

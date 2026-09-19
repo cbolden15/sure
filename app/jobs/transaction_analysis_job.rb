@@ -1,4 +1,6 @@
 class TransactionAnalysisJob < ApplicationJob
+  include BillsHelper
+
   queue_as :medium_priority
 
   retry_on Timeout::Error, Net::OpenTimeout, Net::ReadTimeout, wait: 5.seconds, attempts: 3 do |job, error|
@@ -60,11 +62,18 @@ class TransactionAnalysisJob < ApplicationJob
     end
 
     def broadcast(run)
-      Turbo::StreamsChannel.broadcast_update_to(
-        [ run.transaction_analysis, :runs ],
-        target: "transaction-analysis-run-#{run.id}",
-        html: ""
-      )
+      Current.set(session: Session.new(user: run.transaction_analysis.user)) do
+        ai_configured = bills_one_shot_ai_available?
+        html = ApplicationController.renderer.render(
+          partial: "transaction_analyses/run",
+          locals: { run: run, analysis: run.transaction_analysis, ai_configured: ai_configured }
+        )
+        Turbo::StreamsChannel.broadcast_replace_to(
+          [ run.transaction_analysis, :runs ],
+          target: ActionView::RecordIdentifier.dom_id(run),
+          html: html
+        )
+      end
     rescue StandardError => error
       Rails.logger.warn("Transaction analysis broadcast failed: #{error.class}")
     end

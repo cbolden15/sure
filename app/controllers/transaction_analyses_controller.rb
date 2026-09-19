@@ -1,4 +1,6 @@
 class TransactionAnalysesController < ApplicationController
+  include BillsHelper
+
   before_action :set_transaction_analysis, only: %i[show update destroy]
   before_action :load_workspace, only: %i[index show]
 
@@ -66,7 +68,7 @@ class TransactionAnalysesController < ApplicationController
       @transaction_analysis ||= @analyses.first
       @runs = @transaction_analysis&.runs&.order(created_at: :asc)&.includes(evidences: { source_transaction: :entry }) || []
       @accessible_accounts = Current.user.accessible_accounts.visible.alphabetically
-      @ai_configured = AiHealth.new(run_probes: false).llm_configured?
+      @ai_configured = bills_one_shot_ai_available?
     end
 
     def transaction_analysis_params

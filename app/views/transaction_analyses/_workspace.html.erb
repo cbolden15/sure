@@ -1,5 +1,6 @@
 <div class="max-w-6xl mx-auto py-6 lg:py-10">
   <% if @transaction_analysis&.persisted? %>
+    <%= turbo_stream_from @transaction_analysis, :runs %>
     <div class="grid gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
       <aside class="min-w-0 space-y-4" aria-label="<%= t(".saved_analyses") %>">
         <%= render "transaction_analyses/saved_analyses" %>
@@ -9,7 +10,7 @@
         <%= render "transaction_analyses/analysis_form", analysis: @transaction_analysis %>
         <div class="space-y-5" aria-label="<%= t(".run_history") %>">
           <% @runs.each do |run| %>
-            <%= render "transaction_analyses/run", run: run, analysis: @transaction_analysis %>
+            <%= render "transaction_analyses/run", run: run, analysis: @transaction_analysis, ai_configured: @ai_configured %>
           <% end %>
         </div>
       </section>
