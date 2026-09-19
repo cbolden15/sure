@@ -54,16 +54,7 @@ class TransactionAnalysis::Scope
   end
 
   def data_version
-    @data_version ||= Digest::SHA256.hexdigest(
-      {
-        account_ids: account_ids.map(&:to_s).sort,
-        start_date: start_date.iso8601,
-        end_date: end_date.iso8601,
-        transaction_count: scoped_transactions.count,
-        latest_entry_update: scoped_transactions.maximum("entries.updated_at")&.utc&.iso8601(6),
-        latest_transaction_update: scoped_transactions.maximum("transactions.updated_at")&.utc&.iso8601(6)
-      }.to_json
-    )
+    @data_version ||= Digest::SHA256.hexdigest(calculation_dependencies.to_json)
   end
 
   private
@@ -124,6 +115,46 @@ class TransactionAnalysis::Scope
         },
         accessible_account_ids: account_ids
       ).transactions_scope
+    end
+
+    def calculation_dependencies
+      transactions = scoped_transactions.includes(:category, :merchant, entry: :account).order(:id).to_a
+      entries = transactions.map(&:entry)
+
+      {
+        family: [ user.family.currency, timestamp(user.family.updated_at) ],
+        accounts: accounts.sort_by { |account| account.id.to_s }.map { |account| [ account.id, account.name, timestamp(account.updated_at) ] },
+        transactions: transactions.map { |transaction| transaction_dependency(transaction) },
+        exchange_rates: relevant_exchange_rates(entries)
+      }
+    end
+
+    def transaction_dependency(transaction)
+      entry = transaction.entry
+      category = transaction.category
+      merchant = transaction.merchant
+
+      [
+        transaction.id, transaction.kind, transaction.category_id, transaction.merchant_id, timestamp(transaction.updated_at),
+        category&.id, category&.name, timestamp(category&.updated_at),
+        merchant&.id, merchant&.name, timestamp(merchant&.updated_at),
+        entry.id, entry.account_id, entry.name, entry.amount.to_d.to_s("F"), entry.currency, entry.date.iso8601,
+        entry.excluded?, timestamp(entry.updated_at)
+      ]
+    end
+
+    def relevant_exchange_rates(entries)
+      ExchangeRate.where(
+        from_currency: entries.map(&:currency).uniq,
+        to_currency: user.family.currency,
+        date: entries.map(&:date).uniq
+      ).order(:date, :from_currency, :to_currency).map do |rate|
+        [ rate.date.iso8601, rate.from_currency, rate.to_currency, rate.rate.to_d.to_s("F"), timestamp(rate.updated_at) ]
+      end
+    end
+
+    def timestamp(value)
+      value&.utc&.iso8601(6)
     end
 
     def parse_date!(value, attribute:)

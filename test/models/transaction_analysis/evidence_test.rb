@@ -60,4 +60,21 @@ class TransactionAnalysis::EvidenceTest < ActiveSupport::TestCase
     assert_difference("TransactionAnalysis::Evidence.count", -1) { analysis.destroy! }
     assert_not TransactionAnalysis::Evidence.exists?(evidence.id)
   end
+
+  test "rejects an evidence save that crosses the run limit after validation" do
+    user = users(:family_admin)
+    analysis = user.transaction_analyses.create!(title: "Evidence capacity")
+    run = TransactionAnalysis::Run.create_pending!(analysis: analysis, user: user, prompt: "Review spending")
+
+    24.times do |index|
+      run.evidences.create!(citation_token: "E#{index + 1}", snapshot: { "merchant" => "Merchant #{index}" })
+    end
+    candidate = run.evidences.build(citation_token: "E26", snapshot: { "merchant" => "Candidate" })
+
+    assert_predicate candidate, :valid?
+    run.evidences.create!(citation_token: "E25", snapshot: { "merchant" => "Final allowed" })
+
+    assert_raises(ActiveRecord::RecordInvalid) { candidate.save!(validate: false) }
+    assert_equal TransactionAnalysis::Evidence::MAXIMUM_PER_RUN, run.evidences.reload.count
+  end
 end

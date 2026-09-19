@@ -59,7 +59,10 @@ class TransactionAnalysis::Evidence < ApplicationRecord
     end
 
     def lock_parent_runs_for_write
-      with_locked_parent_runs { yield }
+      with_locked_parent_runs do
+        ensure_run_capacity!
+        yield
+      end
     end
 
     def lock_parent_runs_for_destroy
@@ -86,6 +89,14 @@ class TransactionAnalysis::Evidence < ApplicationRecord
     def completed_parent_run?
       parent_run_ids = [ transaction_analysis_run_id, transaction_analysis_run_id_in_database ].compact.uniq
       TransactionAnalysis::Run.where(id: parent_run_ids, status: :completed).exists?
+    end
+
+    def ensure_run_capacity!
+      return unless new_record?
+      return unless TransactionAnalysis::Evidence.where(transaction_analysis_run_id: transaction_analysis_run_id).count >= MAXIMUM_PER_RUN
+
+      errors.add(:base, "may contain at most #{MAXIMUM_PER_RUN} citations")
+      raise ActiveRecord::RecordInvalid, self
     end
 
     def safe_snapshot_value?(key, value)

@@ -2,6 +2,7 @@ class TransactionAnalysis::Calculator
   class InvalidOperation < StandardError; end
 
   DEFAULT_LARGEST_LIMIT = 10
+  DEFAULT_EXCLUDED_KINDS = %w[funds_movement cc_payment].freeze
 
   attr_reader :scope, :user
 
@@ -9,11 +10,8 @@ class TransactionAnalysis::Calculator
     raise ArgumentError, "user is required" unless user
 
     @user = user
-    @scope = if scope.is_a?(TransactionAnalysis::Scope)
-      scope
-    else
-      TransactionAnalysis::Scope.from_snapshot!(user:, snapshot: scope)
-    end
+    snapshot = scope.is_a?(TransactionAnalysis::Scope) ? scope.snapshot : scope
+    @scope = TransactionAnalysis::Scope.from_snapshot!(user:, snapshot: snapshot)
     @next_token = 1
   end
 
@@ -41,8 +39,11 @@ class TransactionAnalysis::Calculator
       raise InvalidOperation, "breakdown must be by category, merchant, or account"
     end
 
-    grouped = transaction_rows(include_pending:, include_transfers:).group_by { |row| row.fetch(dimension.to_sym) }
-    rows = grouped.map do |label, entries|
+    grouped = transaction_rows(include_pending:, include_transfers:).group_by do |row|
+      dimension == "account" ? row.fetch(:account_id) : row.fetch(dimension.to_sym)
+    end
+    rows = grouped.map do |group_key, entries|
+      label = dimension == "account" ? entries.first.fetch(:account) : group_key
       {
         "dimensions" => { dimension => label },
         "count" => entries.length,
@@ -163,7 +164,7 @@ class TransactionAnalysis::Calculator
         accessible_account_ids: scope.account_ids
       ).transactions_scope
       relation = relation.where(entries: { excluded: false })
-      relation = relation.where.not(kind: Transaction::TRANSFER_KINDS) unless include_transfers
+      relation = relation.where.not(kind: DEFAULT_EXCLUDED_KINDS) unless include_transfers
 
       relation.includes(:category, :merchant, entry: :account).order("entries.date ASC", "transactions.id ASC").map do |transaction|
         entry = transaction.entry
@@ -173,6 +174,7 @@ class TransactionAnalysis::Calculator
           date: entry.date,
           merchant: transaction.merchant&.name.presence || entry.name,
           category: transaction.category&.name.presence || "Uncategorized",
+          account_id: entry.account_id,
           account: scope.account_labels.fetch(scope.account_ids.index(entry.account_id)),
           classification: classification_for(transaction, entry),
           normalized_amount: normalized

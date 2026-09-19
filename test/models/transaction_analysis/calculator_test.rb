@@ -65,6 +65,18 @@ class TransactionAnalysis::CalculatorTest < ActiveSupport::TestCase
     assert_equal true, scope.all_history
   end
 
+  test "reauthorizes prebuilt scopes for the calculator user and revoked access" do
+    assert_raises(TransactionAnalysis::Scope::InaccessibleAccount) do
+      TransactionAnalysis::Calculator.new(user: users(:empty), scope: @scope)
+    end
+
+    @account.update!(status: :disabled)
+
+    assert_raises(TransactionAnalysis::Scope::InaccessibleAccount) do
+      TransactionAnalysis::Calculator.new(user: @user, scope: @scope)
+    end
+  end
+
   test "totals exclude pending and transfers by default and include them only when requested" do
     create_transaction(account: @account, date: Date.new(2024, 1, 2), amount: 100)
     create_transaction(account: @account, date: Date.new(2024, 1, 3), amount: -250)
@@ -82,6 +94,46 @@ class TransactionAnalysis::CalculatorTest < ActiveSupport::TestCase
     assert_equal 2, default_totals.dig("values", "count")
     assert_equal "170.0", expanded_totals.dig("values", "expenses", "raw")
     assert_equal 4, expanded_totals.dig("values", "count")
+  end
+
+  test "totals exclude internal movements but count loan and investment payments as expenses" do
+    date = Date.new(2031, 1, 1)
+    scope = TransactionAnalysis::Scope.resolve!(user: @user, account_ids: [ @account.id ], start_date: date, end_date: date)
+    create_transaction(account: @account, date: date, amount: 10)
+    create_transaction(account: @account, date: date, amount: 20, kind: :funds_movement)
+    create_transaction(account: @account, date: date, amount: 30, kind: :cc_payment)
+    create_transaction(account: @account, date: date, amount: -40, kind: :loan_payment)
+    create_transaction(account: @account, date: date, amount: -50, kind: :investment_contribution)
+
+    totals = TransactionAnalysis::Calculator.new(user: @user, scope: scope).totals
+
+    assert_equal 3, totals.dig("values", "count")
+    assert_equal "100.0", totals.dig("values", "expenses", "raw")
+    assert_equal "0.0", totals.dig("values", "income", "raw")
+  end
+
+  test "data version includes exchange rates and live calculation labels" do
+    date = Date.new(2032, 1, 1)
+    merchant = merchants(:amazon)
+    category = categories(:food_and_drink)
+    create_transaction(account: @account, date: date, amount: 10, currency: "EUR", merchant: merchant, category: category)
+    rate = ExchangeRate.create!(from_currency: "EUR", to_currency: @user.family.currency, rate: 1.2, date: date)
+
+    version = -> { TransactionAnalysis::Scope.resolve!(user: @user, account_ids: [ @account.id ], start_date: date, end_date: date).data_version }
+    first = version.call
+    rate.update!(rate: 1.3)
+    second = version.call
+    merchant.update!(name: "Renamed Amazon")
+    third = version.call
+    category.update!(name: "Renamed Food")
+    fourth = version.call
+    @account.update!(name: "Renamed Checking")
+    fifth = version.call
+
+    assert_not_equal first, second
+    assert_not_equal second, third
+    assert_not_equal third, fourth
+    assert_not_equal fourth, fifth
   end
 
   test "calculations normalize mixed currencies using the dated family-currency rate" do
@@ -127,6 +179,23 @@ class TransactionAnalysis::CalculatorTest < ActiveSupport::TestCase
 
     repeat = TransactionAnalysis::Calculator.new(user: @user, scope: @scope.snapshot).category_breakdown
     assert_equal category_breakdown.except("token"), repeat.except("token")
+  end
+
+  test "account breakdown keeps duplicate labels as separate rows without exposing IDs" do
+    other_account = accounts(:credit_card)
+    other_account.update!(name: @account.name)
+    date = Date.new(2033, 1, 1)
+    scope = TransactionAnalysis::Scope.resolve!(user: @user, account_ids: [ @account.id, other_account.id ], start_date: date, end_date: date)
+    create_transaction(account: @account, date: date, amount: 10)
+    create_transaction(account: other_account, date: date, amount: 20)
+
+    breakdown = TransactionAnalysis::Calculator.new(user: @user, scope: scope).account_breakdown
+    rows = breakdown.dig("values", "rows")
+
+    assert_equal 2, rows.length
+    assert_equal [ @account.name, @account.name ], rows.map { |row| row.dig("dimensions", "account") }
+    assert_not_includes breakdown.to_json, @account.id
+    assert_not_includes breakdown.to_json, other_account.id
   end
 
   test "empty scopes return displayable zero values" do
