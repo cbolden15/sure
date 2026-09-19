@@ -41,7 +41,7 @@ class TransactionAnalysis::Calculator
       raise InvalidOperation, "breakdown must be by category, merchant, or account"
     end
 
-    grouped = transaction_rows(include_pending:, include_transfers:).group_by { |row| row.fetch(dimension) }
+    grouped = transaction_rows(include_pending:, include_transfers:).group_by { |row| row.fetch(dimension.to_sym) }
     rows = grouped.map do |label, entries|
       {
         "dimensions" => { dimension => label },

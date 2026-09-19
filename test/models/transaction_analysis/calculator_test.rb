@@ -1,6 +1,8 @@
 require "test_helper"
 
 class TransactionAnalysis::CalculatorTest < ActiveSupport::TestCase
+  include EntriesTestHelper
+
   setup do
     @user = users(:family_admin)
     @account = accounts(:depository)
@@ -164,7 +166,7 @@ class TransactionAnalysis::CalculatorTest < ActiveSupport::TestCase
     assert_equal 25, evidence.length
     assert_equal (1..25).map { |number| "E#{number}" }, payload.map { |row| row.fetch("token") }
     assert_equal TransactionAnalysis::Evidence::SAFE_SNAPSHOT_FIELDS.sort, payload.first.fetch("transaction").keys.sort
-    assert_not_match(/transaction_id|fixture-account|\"id\"/, payload.to_json)
+    assert_no_match(/transaction_id|fixture-account|\"id\"/, payload.to_json)
 
     evidence.first.source_transaction.destroy!
     evidence.first.reload

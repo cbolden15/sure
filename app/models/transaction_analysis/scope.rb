@@ -26,7 +26,7 @@ class TransactionAnalysis::Scope
     if snapshot
       load_snapshot!(snapshot)
     else
-      resolve!(account_ids:, start_date:, end_date:, all_history:)
+      resolve!(account_ids, start_date:, end_date:, all_history:)
     end
   end
 
