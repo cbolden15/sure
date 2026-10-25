@@ -47,6 +47,11 @@ class Account::ProviderImportAdapter
         e.entryable = Transaction.new
       end
 
+      # find_or_initialize_by builds the new entry into account.entries. If a claim path below
+      # swaps `entry` for an existing record, this blank build would stay in the loaded
+      # association and make the next account.save! fail with "Entries is invalid".
+      built_entry = entry.new_record? ? entry : nil
+
       # === TYPE COLLISION CHECK: Must happen before protection check ===
       # If entry exists but is a different type (e.g., Trade), that's an error.
       # This prevents external_id collisions across different entryable types.
@@ -98,6 +103,7 @@ class Account::ProviderImportAdapter
         if duplicate
           # Check if duplicate is protected - if so, link but don't modify
           if duplicate.protected_from_sync?
+            discard_built_entry(built_entry)
             duplicate.update!(external_id: external_id, source: source)
             record_skip(duplicate, determine_skip_reason(duplicate) || "protected")
             return duplicate
@@ -105,6 +111,7 @@ class Account::ProviderImportAdapter
 
           # "Claim" the unprotected duplicate by updating its external_id and source
           # This prevents future duplicate checks from matching it again
+          discard_built_entry(built_entry)
           entry = duplicate
           entry.assign_attributes(external_id: external_id, source: source)
         end
@@ -132,6 +139,7 @@ class Account::ProviderImportAdapter
         end
 
         if pending_match
+          discard_built_entry(built_entry)
           old_pending_external_id = pending_match.external_id
           pending_entry_date      = pending_match.date
           entry = pending_match
@@ -1032,6 +1040,14 @@ class Account::ProviderImportAdapter
       return @account_linked_to_any_goal if defined?(@account_linked_to_any_goal)
 
       @account_linked_to_any_goal = account.goal_accounts.exists?
+    end
+
+    # Drop an entry that find_or_initialize_by built into account.entries but that a
+    # claim path replaced with an existing record, so it never reaches autosave.
+    def discard_built_entry(built_entry)
+      return unless built_entry&.new_record?
+
+      account.association(:entries).target.delete(built_entry)
     end
 
     def clear_pending_flags_from_extra(extra)
