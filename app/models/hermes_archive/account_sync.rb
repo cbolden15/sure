@@ -146,6 +146,7 @@ class HermesArchive::AccountSync
           date: date!(row["date"], "transaction date"),
           name: required_string!(row["name"], "transaction name", maximum: 500),
           source: SOURCE,
+          category_id: category_mapper.category_id_for(row["plaid_category"]),
           extra: {
             "plaid" => { "pending" => row["pending"] == true },
             SOURCE => { "origin" => payload.fetch("source") }
@@ -153,6 +154,10 @@ class HermesArchive::AccountSync
         )
         counts[:transactions_upserted] += 1
       end
+    end
+
+    def category_mapper
+      @category_mapper ||= HermesArchive::CategoryMapper.new(family)
     end
 
     def import_holdings!(adapter, provider)
@@ -318,6 +323,17 @@ class HermesArchive::AccountSync
       raise ArgumentError, "transaction must be an object" unless row.is_a?(Hash)
       validate_source_id!(row["source_id"], "transaction source_id")
       raise ArgumentError, "transaction pending must be boolean" unless [ true, false ].include?(row["pending"])
+      validate_plaid_category!(row["plaid_category"])
+    end
+
+    # nil (or absent) means "no opinion"; an object carries optional primary/detailed tokens.
+    def validate_plaid_category!(value)
+      return if value.nil?
+      raise ArgumentError, "plaid_category must be an object" unless value.is_a?(Hash)
+      value.slice("primary", "detailed").each_value do |token|
+        next if token.nil?
+        required_string!(token, "plaid_category token", maximum: 64)
+      end
     end
 
     def validate_investment_activity!(row)
