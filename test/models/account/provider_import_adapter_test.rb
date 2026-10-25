@@ -947,6 +947,57 @@ class Account::ProviderImportAdapterTest < ActiveSupport::TestCase
     end
   end
 
+  test "claiming a pending entry leaves no unsaved entry behind on the account" do
+    # Regression: find_or_initialize_by builds a blank entry into account.entries before the
+    # auto-claim path swaps to the pending match. The blank entry stayed in the loaded
+    # association, so a later account.save! failed with "Entries is invalid".
+    @adapter.import_transaction(
+      external_id: "plaid_pending_1",
+      amount: 42.00,
+      currency: "USD",
+      date: Date.today - 1.day,
+      name: "Grocer",
+      source: "plaid",
+      extra: { "plaid" => { "pending" => true } }
+    )
+
+    @adapter.import_transaction(
+      external_id: "plaid_posted_1",
+      amount: 42.00,
+      currency: "USD",
+      date: Date.today,
+      name: "Grocer",
+      source: "plaid",
+      extra: { "plaid" => { "pending" => false } }
+    )
+
+    assert_empty @account.entries.select(&:new_record?), "no unsaved entry should remain in the association"
+    assert @account.valid?, @account.errors.full_messages.join(", ")
+    assert_nothing_raised { @account.update!(balance: @account.balance + 1) }
+  end
+
+  test "claiming a manual duplicate leaves no unsaved entry behind on the account" do
+    @account.entries.create!(
+      date: Date.today,
+      amount: 15.00,
+      currency: "USD",
+      name: "Manual lunch",
+      entryable: Transaction.new
+    )
+
+    @adapter.import_transaction(
+      external_id: "plaid_dup_1",
+      amount: 15.00,
+      currency: "USD",
+      date: Date.today,
+      name: "LUNCH PLACE",
+      source: "plaid"
+    )
+
+    assert_empty @account.entries.select(&:new_record?), "no unsaved entry should remain in the association"
+    assert @account.valid?, @account.errors.full_messages.join(", ")
+  end
+
   test "clears pending flag, preserves pending date, and records old external_id when claiming pending entry with nil extra" do
     # Enable Banking booked transactions often have nil extra (no FX, no MCC).
     # The deep_merge path is skipped, so we must clear the pending flag explicitly.
