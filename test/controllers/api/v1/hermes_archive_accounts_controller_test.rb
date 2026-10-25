@@ -115,10 +115,17 @@ class Api::V1::HermesArchiveAccountsControllerTest < ActionDispatch::Integration
     assert_equal digest("trade-1"), account.entries.find_by!(entryable_type: "Trade").external_id
   end
 
-  test "rejects non-personal and incomplete snapshots" do
+  test "keeps each snapshot's profile and rejects malformed or incomplete ones" do
     payload = account_payload
-    payload[:account][:profile] = "business"
+    payload[:account][:profile] = "vora-technologies-llc"
 
+    assert_difference([ "HermesArchiveAccount.count", "Account.count" ], 1) do
+      post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
+    end
+    assert_response :ok
+    assert_equal "vora-technologies-llc", HermesArchiveAccount.order(:created_at).last.extra["profile"]
+
+    payload[:account][:profile] = "Business LLC!"
     assert_no_difference([ "HermesArchiveAccount.count", "Account.count" ]) do
       post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
     end
@@ -128,6 +135,70 @@ class Api::V1::HermesArchiveAccountsControllerTest < ActionDispatch::Integration
     payload[:account][:complete] = false
     post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
     assert_response :unprocessable_entity
+  end
+
+  test "maps Plaid categories onto family categories and keeps user choices" do
+    payload = account_payload
+    payload[:account][:transactions][0][:plaid_category] = { primary: "FOOD_AND_DRINK", detailed: "FOOD_AND_DRINK_COFFEE" }
+    payload[:account][:transactions][1][:plaid_category] = { primary: "INCOME", detailed: "INCOME_WAGES" }
+    payload[:account][:transactions] << {
+      source_id: digest("transaction-3"),
+      date: Date.current.iso8601,
+      name: "Flight",
+      amount: "320.00",
+      currency: "USD",
+      pending: false,
+      plaid_category: { primary: "TRAVEL", detailed: "TRAVEL_FLIGHTS" }
+    }
+    payload[:account][:transactions] << {
+      source_id: digest("transaction-4"),
+      date: Date.current.iso8601,
+      name: "To savings",
+      amount: "200.00",
+      currency: "USD",
+      pending: false,
+      plaid_category: { primary: "TRANSFER_OUT", detailed: "TRANSFER_OUT_SAVINGS" }
+    }
+
+    assert_difference("@user.family.categories.count", Category::DEFAULT_CATEGORY_TRANSLATION_KEYS.size - 2 + 1) do
+      post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
+    end
+    assert_response :success
+
+    account = Account.find(JSON.parse(response.body).fetch("account_id"))
+    coffee = account.entries.find_by!(external_id: digest("transaction-1")).transaction
+    payroll = account.entries.find_by!(external_id: digest("transaction-2")).transaction
+    flight = account.entries.find_by!(external_id: digest("transaction-3")).transaction
+    transfer = account.entries.find_by!(external_id: digest("transaction-4")).transaction
+
+    assert_equal categories(:food_and_drink), coffee.category
+    assert_equal categories(:income), payroll.category
+    assert_equal "Travel", flight.category.name
+    assert_equal @user.family, flight.category.family
+    assert_nil transfer.category
+
+    coffee.update!(category: categories(:one))
+    coffee.lock_attr!(:category_id)
+
+    post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
+    assert_response :success
+    assert_equal categories(:one), coffee.reload.category
+    assert_equal categories(:income), payroll.reload.category
+  end
+
+  test "ignores unknown Plaid tokens and rejects a malformed plaid_category" do
+    payload = account_payload
+    payload[:account][:transactions][0][:plaid_category] = { primary: "SOMETHING_NEW", detailed: nil }
+    payload[:account][:transactions][1][:plaid_category] = nil
+    post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
+    assert_response :success
+    account = Account.find(JSON.parse(response.body).fetch("account_id"))
+    assert account.entries.where(source: "hermes_archive").all? { |entry| entry.transaction.category_id.nil? }
+
+    payload[:account][:transactions][0][:plaid_category] = { primary: "X" * 65 }
+    post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
+    assert_response :unprocessable_entity
+    assert_equal "validation_failed", JSON.parse(response.body)["error"]
   end
 
   test "rejects raw source identifiers and read-only keys" do

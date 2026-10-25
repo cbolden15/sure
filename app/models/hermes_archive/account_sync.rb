@@ -2,6 +2,7 @@
 
 class HermesArchive::AccountSync
   SOURCE = "hermes_archive"
+  PROFILE_PATTERN = /\A[a-z0-9][a-z0-9-]{0,63}\z/
   ACCOUNT_TYPES = {
     "depository" => "Depository",
     "credit" => "CreditCard",
@@ -65,7 +66,11 @@ class HermesArchive::AccountSync
     attr_reader :family, :owner, :payload, :counts
 
     def validate_payload!
-      raise ArgumentError, "profile must be personal" unless payload["profile"] == "personal"
+      # The bridge stamps each snapshot with its archive profile ("personal", or an
+      # included business profile such as "vora-technologies-llc"); the value is kept on
+      # the account's extra so business and personal rows stay distinguishable.
+      profile = payload["profile"]
+      raise ArgumentError, "profile is invalid" unless profile.is_a?(String) && profile.match?(PROFILE_PATTERN)
       raise ArgumentError, "complete must be true" unless payload["complete"] == true
       raise ArgumentError, "source is invalid" unless HermesArchiveAccount::SOURCES.include?(payload["source"])
       validate_source_id!(payload["source_id"], "source_id")
@@ -146,6 +151,7 @@ class HermesArchive::AccountSync
           date: date!(row["date"], "transaction date"),
           name: required_string!(row["name"], "transaction name", maximum: 500),
           source: SOURCE,
+          category_id: category_mapper.category_id_for(row["plaid_category"]),
           extra: {
             "plaid" => { "pending" => row["pending"] == true },
             SOURCE => { "origin" => payload.fetch("source") }
@@ -153,6 +159,10 @@ class HermesArchive::AccountSync
         )
         counts[:transactions_upserted] += 1
       end
+    end
+
+    def category_mapper
+      @category_mapper ||= HermesArchive::CategoryMapper.new(family)
     end
 
     def import_holdings!(adapter, provider)
@@ -278,7 +288,7 @@ class HermesArchive::AccountSync
         subtype:,
         current_balance: normalized_balance,
         available_balance: payload["available_balance"].nil? ? nil : decimal!(payload["available_balance"], "available_balance"),
-        extra: { "profile" => "personal" }
+        extra: { "profile" => payload["profile"] }
       }
     end
 
@@ -318,6 +328,17 @@ class HermesArchive::AccountSync
       raise ArgumentError, "transaction must be an object" unless row.is_a?(Hash)
       validate_source_id!(row["source_id"], "transaction source_id")
       raise ArgumentError, "transaction pending must be boolean" unless [ true, false ].include?(row["pending"])
+      validate_plaid_category!(row["plaid_category"])
+    end
+
+    # nil (or absent) means "no opinion"; an object carries optional primary/detailed tokens.
+    def validate_plaid_category!(value)
+      return if value.nil?
+      raise ArgumentError, "plaid_category must be an object" unless value.is_a?(Hash)
+      value.slice("primary", "detailed").each_value do |token|
+        next if token.nil?
+        required_string!(token, "plaid_category token", maximum: 64)
+      end
     end
 
     def validate_investment_activity!(row)

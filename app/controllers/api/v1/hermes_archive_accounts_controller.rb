@@ -58,7 +58,7 @@ class Api::V1::HermesArchiveAccountsController < Api::V1::BaseController
         :apr,
         :cash_balance,
         :synced_at,
-        transactions: %i[source_id date name amount currency pending],
+        transactions: [ :source_id, :date, :name, :amount, :currency, :pending, { plaid_category: %i[primary detailed] } ],
         holdings: %i[source_id ticker name quantity price amount currency date],
         investment_activity: %i[source_id ticker date name type subtype quantity price amount fees currency]
       ).to_h
