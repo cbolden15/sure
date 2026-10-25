@@ -2,6 +2,7 @@
 
 class HermesArchive::AccountSync
   SOURCE = "hermes_archive"
+  PROFILE_PATTERN = /\A[a-z0-9][a-z0-9-]{0,63}\z/
   ACCOUNT_TYPES = {
     "depository" => "Depository",
     "credit" => "CreditCard",
@@ -65,7 +66,11 @@ class HermesArchive::AccountSync
     attr_reader :family, :owner, :payload, :counts
 
     def validate_payload!
-      raise ArgumentError, "profile must be personal" unless payload["profile"] == "personal"
+      # The bridge stamps each snapshot with its archive profile ("personal", or an
+      # included business profile such as "vora-technologies-llc"); the value is kept on
+      # the account's extra so business and personal rows stay distinguishable.
+      profile = payload["profile"]
+      raise ArgumentError, "profile is invalid" unless profile.is_a?(String) && profile.match?(PROFILE_PATTERN)
       raise ArgumentError, "complete must be true" unless payload["complete"] == true
       raise ArgumentError, "source is invalid" unless HermesArchiveAccount::SOURCES.include?(payload["source"])
       validate_source_id!(payload["source_id"], "source_id")
@@ -283,7 +288,7 @@ class HermesArchive::AccountSync
         subtype:,
         current_balance: normalized_balance,
         available_balance: payload["available_balance"].nil? ? nil : decimal!(payload["available_balance"], "available_balance"),
-        extra: { "profile" => "personal" }
+        extra: { "profile" => payload["profile"] }
       }
     end
 

@@ -115,10 +115,17 @@ class Api::V1::HermesArchiveAccountsControllerTest < ActionDispatch::Integration
     assert_equal digest("trade-1"), account.entries.find_by!(entryable_type: "Trade").external_id
   end
 
-  test "rejects non-personal and incomplete snapshots" do
+  test "keeps each snapshot's profile and rejects malformed or incomplete ones" do
     payload = account_payload
-    payload[:account][:profile] = "business"
+    payload[:account][:profile] = "vora-technologies-llc"
 
+    assert_difference([ "HermesArchiveAccount.count", "Account.count" ], 1) do
+      post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
+    end
+    assert_response :ok
+    assert_equal "vora-technologies-llc", HermesArchiveAccount.order(:created_at).last.extra["profile"]
+
+    payload[:account][:profile] = "Business LLC!"
     assert_no_difference([ "HermesArchiveAccount.count", "Account.count" ]) do
       post api_v1_hermes_archive_accounts_url, params: payload, headers: api_headers(@api_key), as: :json
     end
